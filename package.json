@@ -1,0 +1,8 @@
+{
+  "name": "payvori-engine",
+  "private": true,
+  "description": "Server functions for Payvori Engine on Netlify",
+  "dependencies": {
+    "@netlify/blobs": "8.2.0"
+  }
+}

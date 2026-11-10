@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Import data · Payvori Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#fbfaf7;--panel:#e6ecf3;--line-strong:#cdd2d9;--fg:#231f1e;--struct:#4a5a6c;--heading:#1e2733;--action:#32a8c7;--action-hover:#2b93af;--sans:'Instrument Sans',Helvetica,Arial,sans-serif;--mono:'JetBrains Mono',ui-monospace,Menlo,monospace;color-scheme:light}
+@media (prefers-color-scheme: dark){:root{--bg:#171e27;--panel:#232e3c;--line-strong:#3c4858;--fg:#e8eaed;--struct:#a3b3c6;--heading:#e8eaed;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
+main{max-width:560px;margin:0 auto;padding:56px 16px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--struct)}
+h1{margin:6px 0 10px;font-weight:600;font-size:30px;letter-spacing:-.03em;line-height:1.1;color:var(--heading)}
+p{margin:0 0 14px;color:var(--struct)}
+.card{border:1px solid var(--line-strong);border-radius:4px;padding:24px;display:flex;flex-direction:column;gap:14px;margin-top:20px}
+label{font-size:14px;color:var(--struct)}
+input[type=file]{font:inherit;color:var(--fg)}
+.check{display:flex;align-items:center;gap:10px;color:var(--fg);min-height:44px;font-size:15px}
+.check input{width:20px;height:20px;margin:0;accent-color:var(--action)}
+button{height:44px;padding:0 16px;border-radius:4px;font:600 15px var(--sans);background:var(--action);border:1px solid var(--action);color:#231f1e;cursor:pointer;align-self:flex-start}
+button:hover{background:var(--action-hover)}
+button:disabled{opacity:.45;cursor:not-allowed}
+:focus-visible{outline:2px solid var(--action);outline-offset:2px}
+pre{margin:0;padding:12px 14px;background:var(--panel);border-radius:4px;font:13px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
+a{color:var(--heading)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Payvori Engine · Admin</div>
+  <h1>Import data</h1>
+  <p>Load the export file of your Engine data from Claude. Do this once, right after the first deploy. Everyone in the file's user list who doesn't have an account yet gets a sign-in invite by email.</p>
+  <div class="card">
+    <label for="file">Export file (.json)</label>
+    <input type="file" id="file" accept=".json,application/json">
+    <pre id="summary" hidden></pre>
+    <label class="check"><input type="checkbox" id="replace">Replace existing data (deletes what's in Engine now)</label>
+    <button type="button" id="go" disabled>Import</button>
+    <pre id="result" role="status" hidden></pre>
+  </div>
+  <p style="margin-top:20px"><a href="/">Open Engine</a></p>
+</main>
+<script src="/auth.js"></script>
+<script>
+(function () {
+  var A = window.PvAuth, docs = null, $ = function (id) { return document.getElementById(id); };
+  if (!A || !A.current()) { location.replace('/login'); return; }
+  function out(el, text) { el.hidden = false; el.textContent = text; }
+  $('file').addEventListener('change', async function () {
+    docs = null; $('go').disabled = true; $('result').hidden = true;
+    var f = this.files[0]; if (!f) return;
+    try {
+      var j = JSON.parse(await f.text());
+      if (j.format !== 'payvori-engine-export' || !j.docs) throw new Error('This is not a Payvori Engine export file.');
+      docs = j.docs;
+      var by = {};
+      Object.keys(docs).forEach(function (p) { var c = p.split('/')[0]; by[c] = (by[c] || 0) + 1; });
+      out($('summary'), Object.keys(by).sort().map(function (c) { return c + ': ' + by[c]; }).join('\n') + '\n\nExported ' + (j.exportedAt || ''));
+      $('go').disabled = false;
+    } catch (e) { out($('summary'), 'Could not read the file. ' + e.message); }
+  });
+  $('go').addEventListener('click', async function () {
+    if (!docs) return;
+    var b = this; b.disabled = true; out($('result'), 'Importing…');
+    try {
+      var r = await A.authFetch('/.netlify/functions/db', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'import', docs: docs, replace: $('replace').checked }) });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(j.error || ('Import failed (' + r.status + ')'));
+      out($('result'), 'Imported ' + j.imported + ' documents.' + (j.replaced ? ' Replaced ' + j.replaced + '.' : '') + '\nInvites sent: ' + j.invited +
+        (j.users && j.users.length ? '\n\n' + j.users.map(function (u) { return u.email + ': ' + (u.result === 'ok' ? 'access set' : u.result); }).join('\n') : ''));
+    } catch (e) { out($('result'), e.message); b.disabled = false; }
+  });
+})();
+</script>
+</body>
+</html>

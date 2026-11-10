@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign in · Payvori Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#fbfaf7; --panel:#e6ecf3; --line:#e0e3e7; --line-strong:#cdd2d9;
+  --fg:#231f1e; --struct:#4a5a6c; --deep:#1e2733; --heading:#1e2733;
+  --action:#32a8c7; --action-hover:#2b93af; --action-press:#257f98; --action-ink:#231f1e;
+  --sans:'Instrument Sans',Helvetica,Arial,sans-serif; --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171e27; --panel:#232e3c; --line:#2c3746; --line-strong:#3c4858;
+  --fg:#e8eaed; --struct:#a3b3c6; --deep:#0f141b; --heading:#e8eaed; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#171e27; --panel:#232e3c; --line:#2c3746; --line-strong:#3c4858;
+  --fg:#e8eaed; --struct:#a3b3c6; --deep:#0f141b; --heading:#e8eaed; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg)}
+body{font-family:var(--sans);font-size:15px;color:var(--fg);-webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column}
+input,button{font-family:inherit}
+a{color:var(--struct);text-decoration:none}
+a:hover{color:var(--heading);text-decoration:underline;text-underline-offset:2px}
+:focus-visible{outline:2px solid var(--action);outline-offset:2px}
+.bar{background:var(--deep)}
+.bar .in{max-width:1240px;margin:0 auto;padding:14px clamp(16px,4vw,28px);display:flex;align-items:center;gap:10px;color:#fbfaf7}
+.bar svg{height:26px;width:auto;display:block}
+.bar .wm{font-weight:600;font-size:20px;letter-spacing:-.035em}
+.bar .prod{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#c3cedb;margin-left:4px}
+main{flex:1;display:flex;justify-content:center;padding:clamp(28px,8vh,88px) 16px 48px}
+.col{width:100%;max-width:420px;display:flex;flex-direction:column;gap:18px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--struct)}
+h1{margin:6px 0 0;font-weight:600;font-size:30px;letter-spacing:-.03em;line-height:1.1;color:var(--heading)}
+.intro{margin:10px 0 0;line-height:1.55;color:var(--struct);text-wrap:pretty}
+.alert{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border:1px solid var(--heading);border-radius:4px}
+.alert b{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:500}
+form{display:flex;flex-direction:column;gap:14px;border:1px solid var(--line-strong);border-radius:4px;padding:24px}
+.field{display:flex;flex-direction:column;gap:5px}
+label{font-size:14px;color:var(--struct)}
+.pw{position:relative}
+input[type=email],input[type=password],input[type=text]{width:100%;height:44px;padding:0 10px;background:var(--panel);border:1px solid var(--line-strong);border-radius:4px;font-size:16px;color:var(--fg)}
+.pw input{padding-right:64px}
+input:focus{outline:2px solid var(--action);outline-offset:1px;border-color:var(--action)}
+.show{position:absolute;top:0;right:0;height:44px;min-width:56px;padding:0 12px;background:transparent;border:0;font-size:14px;font-weight:500;color:var(--struct);cursor:pointer}
+.check{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--fg);cursor:pointer;min-height:44px}
+.check input{width:20px;height:20px;margin:0;accent-color:var(--action)}
+.right{display:flex;justify-content:flex-end}
+.link{display:inline-flex;align-items:center;min-height:44px;font-size:14px}
+.btn{height:44px;padding:0 16px;border-radius:4px;font-size:15px;cursor:pointer}
+.btn.primary{background:var(--action);border:1px solid var(--action);font-weight:600;color:var(--action-ink)}
+.btn.primary:hover{background:var(--action-hover);border-color:var(--action-hover)}
+.btn.primary:active{background:var(--action-press);border-color:var(--action-press)}
+.btn.ghost{background:transparent;border:1px solid var(--heading);font-weight:500;color:var(--heading)}
+.btn.ghost:hover{background:var(--panel)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.who{display:flex;flex-direction:column;gap:4px;padding:12px 14px;background:var(--panel);border-radius:4px}
+.who span{font-family:var(--mono);font-size:14px;color:var(--heading);overflow-wrap:anywhere}
+.muted{margin:0;font-size:14px;line-height:1.55;color:var(--struct)}
+footer{border-top:1px solid var(--line)}
+footer div{max-width:1240px;margin:0 auto;padding:16px clamp(16px,4vw,28px);font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--struct)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="bar"><div class="in">
+  <svg viewBox="0 0 51 72" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 0 0 L 21.75 0 A 29.25 29.25 0 0 1 21.75 58.5 L 16.5 58.5 L 16.5 72 L 0 72 Z M 16.5 16.5 L 21.75 16.5 A 12.75 12.75 0 0 1 21.75 42 L 16.5 42 Z"/></svg>
+  <span class="wm">Payvori</span><span class="prod">Engine</span>
+</div></header>
+
+<main><div class="col">
+  <div>
+    <div class="eyebrow">Payvori Engine</div>
+    <h1 id="title">Sign in</h1>
+    <p class="intro" id="intro">For the Payvori team.</p>
+  </div>
+
+  <div class="alert" id="alert" role="alert" hidden><b>Error</b><div id="alert-text"></div></div>
+
+  <section id="v-signin" hidden>
+    <form id="f-signin" style="margin-bottom:18px">
+      <div class="field"><label for="si-email">Email</label><input id="si-email" type="email" autocomplete="email" required autofocus></div>
+      <div class="field">
+        <label for="si-pw">Password</label>
+        <div class="pw"><input id="si-pw" type="password" autocomplete="current-password" required><button type="button" class="show" aria-label="Show password">Show</button></div>
+        <div class="right"><a href="#" class="link" data-to="forgot">Forgot password?</a></div>
+      </div>
+      <label class="check"><input type="checkbox" id="si-remember" checked>Remember me on this device</label>
+      <button type="submit" class="btn primary">Sign in</button>
+    </form>
+    <p class="muted">Need access? Ask an Engine admin to add you under Users. You'll get an email invite.</p>
+  </section>
+
+  <section id="v-forgot" hidden>
+    <form id="f-forgot" style="margin-bottom:8px">
+      <div class="field"><label for="fg-email">Email</label><input id="fg-email" type="email" autocomplete="email" required></div>
+      <button type="submit" class="btn primary">Send reset link</button>
+    </form>
+    <a href="#" class="link" data-to="signin" style="color:var(--heading);font-weight:500;font-size:15px">Back to sign in</a>
+  </section>
+
+  <section id="v-reset" hidden>
+    <form id="f-reset">
+      <div class="field">
+        <label for="rs-pw">New password, at least 8 characters</label>
+        <div class="pw"><input id="rs-pw" type="password" autocomplete="new-password" minlength="8" required><button type="button" class="show" aria-label="Show password">Show</button></div>
+      </div>
+      <button type="submit" class="btn primary">Save password and continue</button>
+    </form>
+  </section>
+
+  <section id="v-message" hidden style="display:flex;flex-direction:column;gap:18px">
+    <div class="who" id="who" hidden><div class="eyebrow">Signed in as</div><span id="who-email"></span></div>
+    <div class="row">
+      <button type="button" class="btn primary" id="b-check" hidden>Check again</button>
+      <button type="button" class="btn ghost" id="b-signout" hidden>Sign out</button>
+      <button type="button" class="btn ghost" id="b-back" data-to="signin" hidden>Back to sign in</button>
+    </div>
+  </section>
+
+  <p class="muted" id="not-live" hidden>Sign-in isn't available here. It works once this site is deployed to Netlify with Identity turned on.</p>
+</div></main>
+
+<footer><div>Payments · Payroll</div></footer>
+
+<script src="/auth.js"></script>
+<script>
+(function () {
+  var A = window.PvAuth, $ = function (id) { return document.getElementById(id); };
+  var state = { view: 'signin', invite: null, busy: false };
+  var TEXT = {
+    signin: ['Sign in', 'For the Payvori team.'],
+    forgot: ['Reset your password', 'Enter the email on your account and a reset link will be sent to it.'],
+    reset: ['Choose a new password', ''],
+    invite: ['Welcome to Payvori Engine', 'You have been added. Choose a password to finish signing in.'],
+    sent: ['Check your email', ''],
+    pending: ['Not set up yet', "You're signed in, but you haven't been added to Payvori Engine yet. Ask an Engine admin to add you under Users, then check again."]
+  };
+  function show(view, intro) {
+    state.view = view;
+    var t = TEXT[view];
+    $('title').textContent = t[0];
+    $('intro').textContent = intro || t[1];
+    $('intro').hidden = !(intro || t[1]);
+    $('v-signin').hidden = view !== 'signin';
+    $('v-forgot').hidden = view !== 'forgot';
+    $('v-reset').hidden = !(view === 'reset' || view === 'invite');
+    $('v-message').hidden = !(view === 'sent' || view === 'pending');
+    $('b-check').hidden = $('b-signout').hidden = view !== 'pending';
+    $('b-back').hidden = view !== 'sent';
+    var cur = A && A.current();
+    $('who').hidden = view !== 'pending' || !cur;
+    if (cur) $('who-email').textContent = cur.user.email;
+    if (view === 'reset' || view === 'invite') $('rs-pw').value = '';
+  }
+  function error(msg) { $('alert').hidden = !msg; $('alert-text').textContent = msg || ''; }
+  function friendly(m) {
+    if (/invalid.*(grant|login|credentials|password)|no user found/i.test(m)) return 'That email and password do not match an account.';
+    if (/email not confirmed/i.test(m)) return 'Confirm your email first. The link is in your invite message.';
+    if (/signups not allowed/i.test(m)) return 'Accounts are invite-only. Ask an Engine admin to add you.';
+    return m;
+  }
+  function go() { if (A.role()) location.replace('/'); else show('pending'); }
+  async function run(fn) {
+    if (state.busy) return;
+    state.busy = true; error('');
+    document.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    try { await fn(); } catch (e) { error(friendly(e.message)); }
+    state.busy = false;
+    document.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+  }
+
+  document.querySelectorAll('[data-to]').forEach(function (el) {
+    el.addEventListener('click', function (e) { e.preventDefault(); error(''); show(el.getAttribute('data-to')); });
+  });
+  document.querySelectorAll('.show').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var i = b.previousElementSibling, on = i.type === 'password';
+      i.type = on ? 'text' : 'password'; b.textContent = on ? 'Hide' : 'Show'; b.setAttribute('aria-label', on ? 'Hide password' : 'Show password');
+    });
+  });
+  $('f-signin').addEventListener('submit', function (e) {
+    e.preventDefault();
+    run(async function () { await A.login($('si-email').value.trim(), $('si-pw').value, $('si-remember').checked); go(); });
+  });
+  $('f-forgot').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var em = $('fg-email').value.trim();
+    run(async function () { await A.recover(em); show('sent', 'If an account exists for ' + em + ', a reset link is on its way.'); });
+  });
+  $('f-reset').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pw = $('rs-pw').value;
+    run(async function () { if (state.view === 'invite') await A.acceptInvite(state.invite, pw); else await A.setPassword(pw); go(); });
+  });
+  $('b-check').addEventListener('click', function () {
+    run(async function () {
+      await A.fresh(true);
+      if (A.role()) location.replace('/'); else error('Still not added. Ask an Engine admin, then try again.');
+    });
+  });
+  $('b-signout').addEventListener('click', function () { A.logout(); });
+
+  (async function () {
+    show('signin');
+    if (!A || !(await A.live)) { $('not-live').hidden = false; return; }
+    var raw = location.hash.replace(/^#/, ''), h = new URLSearchParams(raw);
+    if (raw) history.replaceState(null, '', location.pathname);
+    try {
+      if (raw === 'not-member') { if (A.current()) return show('pending'); return; }
+      if (h.get('invite_token')) { state.invite = h.get('invite_token'); return show('invite'); }
+      if (h.get('confirmation_token')) { await A.verify(h.get('confirmation_token'), 'signup', true); return go(); }
+      if (h.get('recovery_token')) { await A.verify(h.get('recovery_token'), 'recovery', false); return show('reset'); }
+      if (h.get('error_description')) error(h.get('error_description').replace(/\+/g, ' '));
+      if (A.current()) { await A.fresh(true); go(); }
+    } catch (e) { error(friendly(e.message)); }
+  })();
+})();
+</script>
+</body>
+</html>
