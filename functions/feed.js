@@ -1,7 +1,7 @@
 // Read-only data feed for the Payvori Sales Portal (server to server).
 // Only answers requests carrying the secret in the "x-engine-key" header, which must match the ENGINE_FEED_KEY
 // environment variable set on BOTH Netlify sites. Never called from a browser.
-// Sends: organizations, processors, agent Schedule A's (never Payvori's cost schedules), customers, deals,
+// Sends: organizations and their agents, processors, agent Schedule A's (never Payvori's cost schedules), customers, deals,
 // and finalized residual runs with their merchant lines. The Portal filters everything down to each person.
 const crypto = require('crypto');
 const { getStore, connectLambda } = require('@netlify/blobs');
@@ -54,10 +54,10 @@ exports.handler = async (event) => {
 
   return json(200, {
     generatedAt: new Date().toISOString(),
-    orgs: payees.map(p => pick(p, ['id', 'name', 'role', 'status', 'parentId', 'agentNo', 'email', 'payvoriEmail', 'prShare', 'contactName', 'phone', 'city', 'state'])),
+    orgs: payees.map(p => pick(p, ['id', 'kind', 'name', 'role', 'status', 'parentId', 'orgId', 'portalAccess', 'agentNo', 'email', 'payvoriEmail', 'prShare', 'contactName', 'phone', 'city', 'state'])),
     processors: processors.map(p => ({ id: p.id, name: p.name, platforms: (p.platforms || []).map(x => ({ id: x.id, name: x.name })) })),
     schedules: schedules.filter(s => s.kind === 'agent').map(s => pick(s, ['id', 'code', 'title', 'payeeId', 'processorId', 'platformIds', 'effectiveFrom', 'notes', 'sections', 'updatedAt'])),
-    customers: customers.map(c => pick(c, ['id', 'cidNumber', 'dba', 'legalName', 'status', 'openedDate', 'closedDate', 'orgId', 'contactName', 'phone', 'email', 'city', 'state', 'platform', 'mids'])),
+    customers: customers.map(c => pick(c, ['id', 'cidNumber', 'dba', 'legalName', 'status', 'openedDate', 'closedDate', 'orgId', 'agentId', 'contactName', 'phone', 'email', 'city', 'state', 'platform', 'mids'])),
     deals: deals.map(d => pick(d, ['id', 'merchant', 'mid', 'processor', 'platform', 'versions', 'splits'])),
     runs: runOut
   });
