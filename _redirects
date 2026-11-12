@@ -3,11 +3,13 @@
 /login.html         /login.html            200!
 /auth.js            /auth.js               200!
 
-# One-time data import: Netlify Identity admins only.
+# Backup and import: Netlify Identity admins only.
 /import             /import.html           200!  Role=admin
 /import.html        /import.html           200!  Role=admin
+/backup             /import.html           200!  Role=admin
 /import             /login                 302!
 /import.html        /login                 302!
+/backup             /login                 302!
 
 # The app: Identity admins, and people added under Users in Engine.
 /*                  /:splat                200!  Role=admin,member
