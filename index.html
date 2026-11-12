@@ -2431,7 +2431,22 @@ function viewUsers() {
   }
   h += `<div class="sec-title"><h2>Roles</h2></div><div class="roles">${ROLES_LIST.map(r => `<div class="role-card"><b>${esc(r)}</b><p>${esc(ROLE_DEF[r].desc)}</p><div class="chips">${SECTIONS.filter(x => x.views.some(v => PRICING_VIEWS.includes(v) ? ROLE_DEF[r].sections.includes('pricing') : ROLE_DEF[r].sections.includes(x.key))).map(x => `<span class="chip">${esc(x.label)}</span>`).join('')}${ROLE_DEF[r].sections.includes('pricing') ? '<span class="chip">Organization pricing</span>' : ''}</div></div>`).join('')}</div>
     <p class="muted" style="font-size:13px;margin-top:12px">Netlify Identity admins always have Admin. Anyone who can open the page but isn't listed here sees a "not set up" screen.</p>`;
+  // Backups (Netlify): only Netlify Identity admins can open the Backups page, so only they see this.
+  if (S.isOwner) {
+    if (!S.bkLast && !S._bkKick) { S._bkKick = true; setTimeout(loadBackupInfo, 0); }
+    h += `<div class="sec-title"><h2>Backups</h2></div><div class="note info" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div style="min-width:0;flex:1 1 320px"><div>Everything in Engine is backed up on the 1st of every month. Download a copy, or restore one, on the Backups page.</div><div class="muted" style="font-size:13px;margin-top:4px;font-family:var(--mono)">${esc(S.bkLast || 'Last backup: checking…')}</div></div><a class="btn" href="/backup">Open backups</a></div>`;
+  }
   return h;
+}
+async function loadBackupInfo() {
+  try {
+    const r = await window.PvAuth.authFetch('/.netlify/functions/db', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({op: 'backups'})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'not available');
+    const last = (j.items || [])[0];
+    S.bkLast = last ? 'Last backup: ' + dateLabel(last.at) + (last.kind === 'monthly' ? ' (monthly)' : ' (saved by hand)') : 'No backups yet. The first monthly one is made on the 1st.';
+  } catch (e) { S.bkLast = 'Last backup: could not be checked.'; }
+  render();
 }
 function userModal(u) {
   if (!S.canEditPage) return toast('Only Engine Admins can add or change users.');
