@@ -27,6 +27,15 @@ button:disabled{opacity:.45;cursor:not-allowed}
 :focus-visible{outline:2px solid var(--action);outline-offset:2px}
 pre{margin:0;padding:12px 14px;background:var(--panel);border-radius:4px;font:13px/1.5 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--fg)}
 a{color:var(--heading)}
+button.ghost,button.small{background:transparent;border:1px solid var(--heading);color:var(--heading);font-weight:500}
+button.ghost:hover,button.small:hover{background:var(--panel)}
+button.small{height:36px;padding:0 12px;font-size:14px}
+.list{border:1px solid var(--line-strong);border-radius:4px}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:10px 14px;border-bottom:1px solid var(--line-strong)}
+.row:last-child{border-bottom:0}
+.row .when{flex:1 1 220px;min-width:0;color:var(--fg)}
+.row .when small{display:block;font:12px var(--mono);color:var(--struct)}
+.muted{padding:12px 14px;color:var(--struct);font-size:14px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -39,6 +48,13 @@ a{color:var(--heading)}
     <p style="margin:0">Saves everything in Engine to one file on your computer. Do it monthly and before each residual run. Keep the file private: it holds partner contacts and buy rates.</p>
     <button type="button" id="backup">Download backup</button>
     <pre id="backup-result" role="status" hidden></pre>
+  </div>
+  <div class="card">
+    <h2 style="margin:0;font-size:20px;letter-spacing:-.02em;color:var(--heading)">Saved backups</h2>
+    <p style="margin:0">Engine saves a backup by itself on the 1st of every month and keeps the last 12. You can also save one now, for example before a residual run. Download any of them, or restore Engine to how it was.</p>
+    <button type="button" id="save-now" class="ghost">Save a backup now</button>
+    <div id="saved" class="list"><div class="muted">Loading…</div></div>
+    <pre id="saved-result" role="status" hidden></pre>
   </div>
   <div class="card">
     <h2 style="margin:0;font-size:20px;letter-spacing:-.02em;color:var(--heading)">Import</h2>
@@ -94,24 +110,77 @@ a{color:var(--heading)}
     } catch (e) { out($('backup-result'), 'The backup could not be made. ' + e.message); }
     b.disabled = false;
   });
+  function saveFile(name, data) {
+    var blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+  }
+  // Import any set of documents: begin (check or clear), parts of about 2 MB, end (invites).
+  async function runImport(all, replace, el) {
+    var begin = await call({ op: 'importBegin', replace: replace });
+    var paths = Object.keys(all), part = {}, size = 0, done = 0;
+    async function send() { if (!Object.keys(part).length) return; await call({ op: 'importPart', docs: part }); done += Object.keys(part).length; part = {}; size = 0; out(el, 'Importing… ' + done + ' of ' + paths.length); }
+    for (var k = 0; k < paths.length; k++) {
+      var len = JSON.stringify(all[paths[k]]).length;
+      if (size && size + len > 2 * 1024 * 1024) await send();
+      part[paths[k]] = all[paths[k]]; size += len;
+    }
+    await send();
+    var end = await call({ op: 'importEnd' });
+    return 'Imported ' + done + ' documents.' + (begin.replaced ? ' Replaced ' + begin.replaced + '.' : '') + '\nInvites sent: ' + end.invited +
+      (end.users && end.users.length ? '\n\n' + end.users.map(function (u) { return u.email + ': ' + (u.result === 'ok' ? 'access set' : u.result); }).join('\n') : '');
+  }
   $('go').addEventListener('click', async function () {
     if (!docs) return;
     var b = this; b.disabled = true; out($('result'), 'Importing…');
-    try {
-      var begin = await call({ op: 'importBegin', replace: $('replace').checked });
-      var paths = Object.keys(docs), part = {}, size = 0, done = 0;
-      async function send() { if (!Object.keys(part).length) return; await call({ op: 'importPart', docs: part }); done += Object.keys(part).length; part = {}; size = 0; out($('result'), 'Importing… ' + done + ' of ' + paths.length); }
-      for (var k = 0; k < paths.length; k++) {
-        var len = JSON.stringify(docs[paths[k]]).length;
-        if (size && size + len > 2 * 1024 * 1024) await send();
-        part[paths[k]] = docs[paths[k]]; size += len;
-      }
-      await send();
-      var end = await call({ op: 'importEnd' });
-      out($('result'), 'Imported ' + done + ' documents.' + (begin.replaced ? ' Replaced ' + begin.replaced + '.' : '') + '\nInvites sent: ' + end.invited +
-        (end.users && end.users.length ? '\n\n' + end.users.map(function (u) { return u.email + ': ' + (u.result === 'ok' ? 'access set' : u.result); }).join('\n') : ''));
-    } catch (e) { out($('result'), e.message); b.disabled = false; }
+    try { out($('result'), await runImport(docs, $('replace').checked, $('result'))); } catch (e) { out($('result'), e.message); b.disabled = false; }
   });
+
+  // ---- Saved backups ----
+  var saved = [];
+  function when(at) { var d = new Date(at); return isNaN(d) ? at : d.toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  async function getSaved(key, el) {
+    var all = {}, cursor = 0, total = 0, at = '';
+    while (cursor !== null) { var j = await call({ op: 'backupGet', key: key, cursor: cursor }); Object.assign(all, j.docs); total = j.total; cursor = j.next; at = j.exportedAt; out(el, 'Fetching… ' + Object.keys(all).length + ' of ' + total); }
+    return { docs: all, at: at };
+  }
+  function drawSaved() {
+    var box = $('saved');
+    if (!saved.length) { box.innerHTML = '<div class="muted">No saved backups yet. The first monthly one is made on the 1st.</div>'; return; }
+    box.innerHTML = '';
+    saved.forEach(function (x) {
+      var row = document.createElement('div'); row.className = 'row';
+      var w = document.createElement('div'); w.className = 'when'; w.textContent = when(x.at);
+      var sm = document.createElement('small'); sm.textContent = (x.kind === 'monthly' ? 'Monthly' : 'Saved by hand') + (x.count != null ? ' · ' + x.count + ' documents' : ''); w.appendChild(sm);
+      var dl = document.createElement('button'); dl.type = 'button'; dl.className = 'small'; dl.textContent = 'Download';
+      dl.onclick = async function () {
+        dl.disabled = true;
+        try { var r = await getSaved(x.key, $('saved-result')); saveFile('payvori-engine-backup-' + String(r.at || x.at).slice(0, 10) + '.json', { format: 'payvori-engine-export', exportedAt: r.at || x.at, source: 'Payvori Engine saved backup', docs: r.docs }); out($('saved-result'), 'Downloaded the backup from ' + when(x.at) + '. It is in your Downloads folder.'); }
+        catch (e) { out($('saved-result'), 'Could not download it. ' + e.message); }
+        dl.disabled = false;
+      };
+      var rs = document.createElement('button'); rs.type = 'button'; rs.className = 'small'; rs.textContent = 'Restore';
+      rs.onclick = async function () {
+        if (!window.confirm('Restore Engine to how it was on ' + when(x.at) + '? Everything entered since then is deleted. Download a backup first if you might need it.')) return;
+        rs.disabled = true;
+        try { var r = await getSaved(x.key, $('saved-result')); out($('saved-result'), await runImport(r.docs, true, $('saved-result'))); }
+        catch (e) { out($('saved-result'), 'The restore did not finish. ' + e.message); }
+        rs.disabled = false;
+      };
+      row.append(w, dl, rs); box.appendChild(row);
+    });
+  }
+  async function loadSaved() {
+    try { saved = (await call({ op: 'backups' })).items || []; drawSaved(); }
+    catch (e) { $('saved').innerHTML = ''; var d = document.createElement('div'); d.className = 'muted'; d.textContent = 'Saved backups could not be loaded. ' + e.message; $('saved').appendChild(d); }
+  }
+  $('save-now').addEventListener('click', async function () {
+    var b = this; b.disabled = true; out($('saved-result'), 'Saving…');
+    try { var j = await call({ op: 'backupNow' }); out($('saved-result'), 'Saved a backup of ' + j.count + ' documents.'); await loadSaved(); }
+    catch (e) { out($('saved-result'), 'The backup could not be saved. ' + e.message); }
+    b.disabled = false;
+  });
+  loadSaved();
 })();
 </script>
 </body>
