@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Import data · Payvori Engine</title>
+<title>Backup and import · Payvori Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -33,10 +33,17 @@ a{color:var(--heading)}
 <body>
 <main>
   <div class="eyebrow">Payvori Engine · Admin</div>
-  <h1>Import data</h1>
-  <p>Load the export file of your Engine data from Claude. Do this once, right after the first deploy. Everyone in the file's user list who doesn't have an account yet gets a sign-in invite by email.</p>
+  <h1>Backup and import</h1>
   <div class="card">
-    <label for="file">Export file (.json)</label>
+    <h2 style="margin:0;font-size:20px;letter-spacing:-.02em;color:var(--heading)">Download a backup</h2>
+    <p style="margin:0">Saves everything in Engine to one file on your computer. Do it monthly and before each residual run. Keep the file private: it holds partner contacts and buy rates.</p>
+    <button type="button" id="backup">Download backup</button>
+    <pre id="backup-result" role="status" hidden></pre>
+  </div>
+  <div class="card">
+    <h2 style="margin:0;font-size:20px;letter-spacing:-.02em;color:var(--heading)">Import</h2>
+    <p style="margin:0">Load a backup, or an export of the Engine data from Claude. Everyone in the file's user list who doesn't have an Engine sign-in yet gets an invite by email.</p>
+    <label for="file">Backup or export file (.json)</label>
     <input type="file" id="file" accept=".json,application/json">
     <pre id="summary" hidden></pre>
     <label class="check"><input type="checkbox" id="replace">Replace existing data (deletes what's in Engine now)</label>
@@ -56,7 +63,7 @@ a{color:var(--heading)}
     var f = this.files[0]; if (!f) return;
     try {
       var j = JSON.parse(await f.text());
-      if (j.format !== 'payvori-engine-export' || !j.docs) throw new Error('This is not a Payvori Engine export file.');
+      if (j.format !== 'payvori-engine-export' || !j.docs) throw new Error('This is not a Payvori Engine export or backup file.');
       docs = j.docs;
       var by = {};
       Object.keys(docs).forEach(function (p) { var c = p.split('/')[0]; by[c] = (by[c] || 0) + 1; });
@@ -64,15 +71,45 @@ a{color:var(--heading)}
       $('go').disabled = false;
     } catch (e) { out($('summary'), 'Could not read the file. ' + e.message); }
   });
+  async function call(body) {
+    var r = await A.authFetch('/.netlify/functions/db', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    var j = await r.json().catch(function () { return {}; });
+    if (!r.ok) throw new Error(j.error || ('Request failed (' + r.status + ')'));
+    return j;
+  }
+  $('backup').addEventListener('click', async function () {
+    var b = this; b.disabled = true; out($('backup-result'), 'Collecting…');
+    try {
+      var docs = {}, cursor = 0, total = 0;
+      while (cursor !== null) {
+        var j = await call({ op: 'export', cursor: cursor });
+        Object.assign(docs, j.docs); total = j.total; cursor = j.next;
+        out($('backup-result'), 'Collecting… ' + Object.keys(docs).length + ' of ' + total);
+      }
+      var day = new Date().toISOString().slice(0, 10);
+      var blob = new Blob([JSON.stringify({ format: 'payvori-engine-export', exportedAt: new Date().toISOString(), source: 'Payvori Engine backup', docs: docs })], { type: 'application/json' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'payvori-engine-backup-' + day + '.json';
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+      out($('backup-result'), 'Saved payvori-engine-backup-' + day + '.json with ' + Object.keys(docs).length + ' documents. It is in your Downloads folder.');
+    } catch (e) { out($('backup-result'), 'The backup could not be made. ' + e.message); }
+    b.disabled = false;
+  });
   $('go').addEventListener('click', async function () {
     if (!docs) return;
     var b = this; b.disabled = true; out($('result'), 'Importing…');
     try {
-      var r = await A.authFetch('/.netlify/functions/db', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'import', docs: docs, replace: $('replace').checked }) });
-      var j = await r.json().catch(function () { return {}; });
-      if (!r.ok) throw new Error(j.error || ('Import failed (' + r.status + ')'));
-      out($('result'), 'Imported ' + j.imported + ' documents.' + (j.replaced ? ' Replaced ' + j.replaced + '.' : '') + '\nInvites sent: ' + j.invited +
-        (j.users && j.users.length ? '\n\n' + j.users.map(function (u) { return u.email + ': ' + (u.result === 'ok' ? 'access set' : u.result); }).join('\n') : ''));
+      var begin = await call({ op: 'importBegin', replace: $('replace').checked });
+      var paths = Object.keys(docs), part = {}, size = 0, done = 0;
+      async function send() { if (!Object.keys(part).length) return; await call({ op: 'importPart', docs: part }); done += Object.keys(part).length; part = {}; size = 0; out($('result'), 'Importing… ' + done + ' of ' + paths.length); }
+      for (var k = 0; k < paths.length; k++) {
+        var len = JSON.stringify(docs[paths[k]]).length;
+        if (size && size + len > 2 * 1024 * 1024) await send();
+        part[paths[k]] = docs[paths[k]]; size += len;
+      }
+      await send();
+      var end = await call({ op: 'importEnd' });
+      out($('result'), 'Imported ' + done + ' documents.' + (begin.replaced ? ' Replaced ' + begin.replaced + '.' : '') + '\nInvites sent: ' + end.invited +
+        (end.users && end.users.length ? '\n\n' + end.users.map(function (u) { return u.email + ': ' + (u.result === 'ok' ? 'access set' : u.result); }).join('\n') : ''));
     } catch (e) { out($('result'), e.message); b.disabled = false; }
   });
 })();
