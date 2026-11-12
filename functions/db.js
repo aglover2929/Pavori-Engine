@@ -224,6 +224,41 @@ exports.handler = async (event, context) => {
       return json(200, { docs, total: keys.length, next: i < keys.length ? i : null });
     }
 
+    // ---- Saved backups (monthly ones are made by functions/monthly-backup.mjs) ----
+    case 'backups': {
+      if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can see backups');
+      const bs = getStore('payvori-engine-backups');
+      const { blobs } = await bs.list();
+      const items = [];
+      for (const b of blobs) { const m = await bs.getMetadata(b.key).catch(() => null); items.push({ key: b.key, kind: b.key.split('/')[0], at: (m && m.metadata && m.metadata.at) || b.key.split('/')[1] || '', count: (m && m.metadata && m.metadata.count) || null }); }
+      items.sort((a, b) => String(b.at).localeCompare(String(a.at)));
+      return json(200, { items });
+    }
+    case 'backupNow': {
+      if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can make backups');
+      const bs = getStore('payvori-engine-backups');
+      const { blobs } = await store.list();
+      const docs = {};
+      for (const k of blobs.map(b => b.key).filter(k => !k.startsWith('_')).sort()) { const raw = await store.get(k); if (raw != null) try { docs[k] = JSON.parse(raw); } catch (e) {} }
+      const at = new Date().toISOString();
+      await bs.set('manual/' + at, JSON.stringify({ format: 'payvori-engine-export', exportedAt: at, source: 'Payvori Engine backup (saved by ' + (user.email || 'an admin') + ')', docs }), { metadata: { at, count: Object.keys(docs).length, kind: 'manual' } });
+      const { blobs: old } = await bs.list({ prefix: 'manual/' });
+      for (const k of old.map(b => b.key).sort().reverse().slice(5)) await bs.delete(k);
+      return json(200, { ok: true, at, count: Object.keys(docs).length });
+    }
+    // One saved backup, in pages so each reply stays under Netlify's size limit.
+    case 'backupGet': {
+      if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can download backups');
+      if (typeof body.key !== 'string' || !/^(monthly|manual)\/[0-9TZ:.\-]+$/.test(body.key)) return fail(400, 'invalid_argument', 'Bad backup');
+      const raw = await getStore('payvori-engine-backups').get(body.key);
+      if (raw == null) return fail(404, 'not_found', 'That backup is gone');
+      const all = JSON.parse(raw), keys = Object.keys(all.docs || {}).sort();
+      const start = Math.max(0, parseInt(body.cursor, 10) || 0), docs = {};
+      let i = start, bytes = 0;
+      for (; i < keys.length; i++) { const len = JSON.stringify(all.docs[keys[i]]).length; if (bytes && bytes + len > EXPORT_PAGE_BYTES) break; docs[keys[i]] = all.docs[keys[i]]; bytes += len; }
+      return json(200, { docs, total: keys.length, next: i < keys.length ? i : null, exportedAt: all.exportedAt });
+    }
+
     // ---- Import: begin (check / clear), then parts, then end (invites). Small files can still use one 'import' call. ----
     case 'importBegin':
     case 'import': {
