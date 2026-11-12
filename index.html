@@ -2916,6 +2916,10 @@ function agentModal(a, preset) {
     if (dupPay) { $('#a-ref', m).focus(); return toast(`Payroll number ${payRef} is already used by ${dupPay.name}.`); }
     const pv = val(m, 'a-pvemail').toLowerCase();
     if (pv && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(pv)) { $('#a-pvemail', m).focus(); return toast('Enter a valid Payvori email.'); }
+    // Each agent's Sales Portal login (Payvori email, else statement email) must be theirs alone.
+    const portalLogin = x => String(x.payvoriEmail || x.email || '').trim().toLowerCase(), myLogin = pv || val(m, 'a-email').toLowerCase();
+    const dupLogin = myLogin && S.payees.find(x => isAgent(x) && x.id !== a.id && portalLogin(x) === myLogin);
+    if (dupLogin) { $(pv ? '#a-pvemail' : '#a-email', m).focus(); return toast(`${myLogin} is already the Sales Portal login for ${dupLogin.name}. Each agent needs their own email.`); }
     const ob = parseMoney(val(m, 'a-open')) || 0, om = val(m, 'a-openm');
     if (ob && !om) { $('#a-openm', m).focus(); return toast('Choose the month the opening balance applies from.'); }
     if (!needWrite()) return;
