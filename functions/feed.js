@@ -43,7 +43,7 @@ exports.handler = async (event) => {
     const lines = [];
     for (let i = 0; i < (r.lineChunks || 0); i++) {
       const c = await store.get(`runs/${r.id}/lines/c${i}`, { type: 'json' });
-      for (const l of (c && c.items) || []) lines.push({ dealId: l.dealId, merchant: l.merchant, mid: l.mid, net: l.net, splits: (l.splits || []).map(s => ({ payeeId: s.payeeId, pct: s.pct, amount: s.amount })) });
+      for (const l of (c && c.items) || []) lines.push({ dealId: l.dealId, merchant: l.merchant, mid: l.mid, net: l.net, splits: (l.splits || []).map(s => ({ payeeId: s.payeeId, paidTo: s.paidTo || s.payeeId, kind: s.kind || '', pct: s.pct, amount: s.amount })) });
     }
     const paid = {};
     for (const [id, p] of Object.entries(r.paid || {})) paid[id] = { date: p.date || '', amount: p.amount };
