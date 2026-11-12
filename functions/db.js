@@ -5,6 +5,37 @@
 const { getStore, connectLambda } = require('@netlify/blobs');
 
 const ENGINE_ROLES = ['Admin', 'Finance', 'Operations', 'Sales', 'Read-only'];
+// What each Engine role may reach, enforced here on the server (the page also hides sections, but that alone is not
+// protection). Keep in step with ROLE_DEF in index.html.
+const ROLE_SECTIONS = {
+  'Admin': ['fin', 'orgs', 'pricing', 'res', 'cid', 'orders', 'users'],
+  'Finance': ['fin', 'orgs', 'pricing', 'res', 'cid'],
+  'Operations': ['orgs', 'cid', 'orders'],
+  'Sales': ['orgs', 'cid', 'orders'],
+  'Read-only': ['fin', 'orgs', 'pricing', 'res', 'cid', 'orders']
+};
+// Reading needs any one of these sections. Collections not listed are readable by every Engine user.
+const READ_NEEDS = { runs: ['fin', 'res'], ledger: ['fin', 'res'] };
+// Saving needs any one of these sections (and a role that can write). Collections not listed: any role that can write.
+const WRITE_NEEDS = { schedules: ['pricing'], processors: ['pricing'], runs: ['res', 'fin'], ledger: ['fin'], settings: ['res', 'fin'],
+  orders: ['orders'], customers: ['cid'], merchants: ['cid'], deals: ['cid'], maint: ['cid'], payees: ['orgs'], users: ['users'] };
+const top = p => String(p).split('/')[0];
+const allows = (acc, needs) => !needs || needs.some(n => acc.sections.includes(n));
+// Without the pricing section, schedules come through by name only: no rates, and none of Payvori's cost schedules.
+function redactSchedules(acc, list) {
+  if (acc.sections.includes('pricing')) return list;
+  return list.filter(d => (d.data || {}).kind !== 'cost').map(d => {
+    const x = d.data || {};
+    return { id: d.id, data: { kind: x.kind, code: x.code, title: x.title, payeeId: x.payeeId, processorId: x.processorId, platformIds: x.platformIds, effectiveFrom: x.effectiveFrom, sections: [] } };
+  });
+}
+function readDoc(acc, path, data) {
+  if (data == null) return null;
+  if (!allows(acc, READ_NEEDS[top(path)])) return null;
+  if (top(path) === 'schedules' && path.split('/').length === 2) { const r = redactSchedules(acc, [{ id: path.slice(10), data }]); return r.length ? r[0].data : null; }
+  return data;
+}
+const EXPORT_PAGE_BYTES = 4 * 1024 * 1024;
 const SEG = /^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 const REV = '_meta/rev';
 
@@ -35,7 +66,7 @@ async function access(store, user) {
   const rec = users.find(u => u.id === user.sub) || users.find(u => u.data.inviteEmail && String(u.data.inviteEmail).toLowerCase() === email);
   const active = rec && rec.data.status !== 'Disabled' ? rec : null;
   const role = isAdmin ? 'Admin' : active ? (ENGINE_ROLES.includes(active.data.role) ? active.data.role : 'Read-only') : null;
-  return { isAdmin, role, member: !!role, canWrite: !!role && role !== 'Read-only', canManageUsers: isAdmin || role === 'Admin', users };
+  return { isAdmin, role, member: !!role, sections: role ? ROLE_SECTIONS[role] || [] : [], canWrite: !!role && role !== 'Read-only', canManageUsers: isAdmin || role === 'Admin', users };
 }
 
 // ---- Netlify Identity (admin API, using the function's own admin token) ----
@@ -104,18 +135,20 @@ exports.handler = async (event, context) => {
       const cols = {}, docs = {};
       for (const c of [...new Set(body.cols || [])]) {
         if (!okPath(c, 'col')) continue;
-        cols[c] = c === 'users' ? acc.users : await listCol(store, c);
+        if (!allows(acc, READ_NEEDS[top(c)])) { cols[c] = []; continue; }
+        const list = c === 'users' ? acc.users : await listCol(store, c);
+        cols[c] = c === 'schedules' ? redactSchedules(acc, list) : list;
       }
       for (const d of [...new Set(body.docs || [])]) {
         if (!okPath(d, 'doc')) continue;
-        docs[d] = await store.get(d, { type: 'json' });
+        docs[d] = readDoc(acc, d, await store.get(d, { type: 'json' }));
       }
       return json(200, { rev, cols, docs });
     }
 
     case 'get': {
       if (!okPath(body.path, 'doc')) return fail(400, 'invalid_argument', 'Bad path');
-      const data = await store.get(body.path, { type: 'json' });
+      const data = readDoc(acc, body.path, await store.get(body.path, { type: 'json' }));
       return json(200, { exists: data != null, data });
     }
 
@@ -127,6 +160,7 @@ exports.handler = async (event, context) => {
       const isUsers = path.split('/').length === 2 && path.startsWith('users/');
       if (!acc.canWrite) return fail(403, 'invalid_argument', 'Your role is Read-only');
       if (path.startsWith('users/') && !acc.canManageUsers) return fail(403, 'invalid_argument', 'Only Engine Admins can change users');
+      if (!top(path).startsWith('users') && !allows(acc, WRITE_NEEDS[top(path)])) return fail(403, 'invalid_argument', 'Your role can\'t change this part of Engine');
       const prev = await store.get(path, { type: 'json' });
       let next = null;
       if (body.op === 'delete') {
@@ -174,27 +208,57 @@ exports.handler = async (event, context) => {
       return json(200, { people });
     }
 
+    // ---- Backups: export everything in pages (each reply stays under Netlify's size limit) ----
+    case 'export': {
+      if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can export');
+      const { blobs } = await store.list();
+      const keys = blobs.map(b => b.key).filter(k => !k.startsWith('_')).sort();
+      const start = Math.max(0, parseInt(body.cursor, 10) || 0), docs = {};
+      let i = start, bytes = 0;
+      for (; i < keys.length; i++) {
+        const raw = await store.get(keys[i]);
+        if (raw == null) continue;
+        if (bytes && bytes + raw.length > EXPORT_PAGE_BYTES) break;
+        try { docs[keys[i]] = JSON.parse(raw); bytes += raw.length; } catch (e) {}
+      }
+      return json(200, { docs, total: keys.length, next: i < keys.length ? i : null });
+    }
+
+    // ---- Import: begin (check / clear), then parts, then end (invites). Small files can still use one 'import' call. ----
+    case 'importBegin':
     case 'import': {
+      if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can import');
+      const { blobs } = await store.list();
+      const existing = blobs.map(b => b.key).filter(k => !k.startsWith('_'));
+      if (existing.length && !body.replace) return fail(409, 'exists', 'Engine already has ' + existing.length + ' documents. Tick "Replace existing data" to overwrite them.');
+      if (body.replace) for (const k of existing) await store.delete(k);
+      if (body.op === 'importBegin') { await bump(); return json(200, { ok: true, replaced: body.replace ? existing.length : 0 }); }
+      body.replaced = body.replace ? existing.length : 0;
+    }
+    // falls through for a one-call 'import'
+    case 'importPart': {
       if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can import');
       const docs = body.docs && typeof body.docs === 'object' ? body.docs : null;
       if (!docs) return fail(400, 'invalid_argument', 'No documents in the file');
       const paths = Object.keys(docs);
       const bad = paths.filter(p => !okPath(p, 'doc'));
       if (bad.length) return fail(400, 'invalid_argument', 'Bad paths: ' + bad.slice(0, 5).join(', '));
-      const { blobs } = await store.list();
-      const existing = blobs.map(b => b.key).filter(k => !k.startsWith('_'));
-      if (existing.length && !body.replace) return fail(409, 'exists', 'Engine already has ' + existing.length + ' documents. Tick "Replace existing data" to overwrite them.');
-      if (body.replace) for (const k of existing) await store.delete(k);
       for (const p of paths) await store.setJSON(p, docs[p]);
       await bump();
+      if (body.op === 'importPart') return json(200, { ok: true, imported: paths.length });
+    }
+    // falls through for a one-call 'import'
+    case 'importEnd': {
+      if (!acc.isAdmin) return fail(403, 'invalid_argument', 'Only Netlify Identity admins can import');
       const cache = {}, invites = [];
-      for (const p of paths.filter(p => p.split('/').length === 2 && p.startsWith('users/'))) {
-        const d = docs[p];
-        if (d.status === 'Disabled') continue;
-        let r; try { r = await setMember(identity, targetOf(p.slice(6), d), true, cache); } catch (e) { r = e.message; }
-        invites.push({ email: d.inviteEmail || p.slice(6), result: r });
+      for (const u of await listCol(store, 'users')) {
+        if (u.data.status === 'Disabled') continue;
+        let r; try { r = await setMember(identity, targetOf(u.id, u.data), true, cache); } catch (e) { r = e.message; }
+        invites.push({ email: u.data.inviteEmail || u.id, result: r });
       }
-      return json(200, { ok: true, imported: paths.length, replaced: existing.length && body.replace ? existing.length : 0, invited: cache.invited || 0, users: invites });
+      const out = { ok: true, invited: cache.invited || 0, users: invites };
+      if (body.op === 'import') { out.imported = Object.keys(body.docs).length; out.replaced = body.replaced || 0; }
+      return json(200, out);
     }
   }
   return fail(400, 'invalid_argument', 'Unknown operation');
