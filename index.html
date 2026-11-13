@@ -275,6 +275,12 @@ tr.me td{background:var(--panel-2)}
 .search input[type=text]{padding-left:34px}
 .kv a{color:var(--struct);text-underline-offset:2px}
 .kv a:hover{color:var(--fg)}
+.req{color:var(--neg);margin-left:3px;font-weight:600}
+.field.need input:not([type=radio]):not([type=checkbox]),.field.need select{border-color:var(--neg);box-shadow:0 0 0 1px var(--neg)}
+.field.need>label,.field.need>.flabel{color:var(--neg)}
+.field.need::after{content:"Needed for a complete W-9";display:block;font-size:12px;color:var(--neg);margin-top:4px}
+.note.neg-note{background:var(--neg-bg);border-color:var(--neg)}
+.note.neg-note a{color:inherit;text-decoration:underline}
 </style>
 
 <header class="top">
@@ -415,9 +421,9 @@ const who = id => S.names[id] || (id && id === S.uid ? 'you' : 'a teammate');
 /* ---------- routing ---------- */
 function go(view, opts = {}) {
   if (view === 'home') { const r = myRole(); view = r ? firstView(SECTIONS.find(x => sectionOk(x.key)).key) : 'fin'; }
-  S.view = view; if (opts.runId !== undefined) S.runId = opts.runId; if (opts.custId !== undefined) { S.custId = opts.custId; if (view === 'customer') S.custTab = opts.tab || 'overview'; } if (opts.merchantId !== undefined) S.merchantId = opts.merchantId; if (opts.orgId !== undefined) S.orgId = opts.orgId; if (opts.agentId !== undefined) S.agentId = opts.agentId; if (view === 'org') S.orgTab = opts.tab || 'overview'; if (view !== 'schedule') S.edit = null;
+  S.view = view; if (opts.runId !== undefined) S.runId = opts.runId; if (opts.custId !== undefined) { S.custId = opts.custId; if (view === 'customer') S.custTab = opts.tab || 'overview'; } if (opts.merchantId !== undefined) S.merchantId = opts.merchantId; if (opts.orgId !== undefined) S.orgId = opts.orgId; if (opts.agentId !== undefined) S.agentId = opts.agentId; if (opts.partnerId !== undefined) { S.partnerId = opts.partnerId; S.partnerFrom = opts.partnerFrom || ''; } if (view === 'org') S.orgTab = opts.tab || 'overview'; if (view !== 'schedule') S.edit = null;
   if (view === 'run') S.runTab = opts.tab || 'payees';
-  try { history.replaceState(null, '', '#' + ({run: 'runs', schedule: schedKind() === 'cost' ? 'costs' : 'orgs', customer: 'cid', merchant: 'cid', org: 'orgs', agent: 'orgs'}[view] || view)); } catch {}
+  try { history.replaceState(null, '', '#' + ({run: 'runs', schedule: schedKind() === 'cost' ? 'costs' : 'orgs', customer: 'cid', merchant: 'cid', org: 'orgs', agent: 'orgs', partner: 'partners'}[view] || view)); } catch {}
   render(); window.scrollTo(0, 0);
 }
 document.addEventListener('click', e => {
@@ -440,8 +446,8 @@ function render() {
   else if (role && !ROLE_DEF[role].write) html += `<div class="ro-banner">Your Engine role is Read-only. You can look around but not change anything.</div>`;
   if (!role) { main.innerHTML = html + viewNoAccess(); return; }
   const subs = (SUBNAV[sec] || []).filter(([v]) => viewOk(v));
-  if (subs.length > 1) { const cur = {run: 'runs', customer: 'cid', merchant: 'cid', schedule: schedKind() === 'cost' ? 'costs' : 'pricing'}[S.view] || S.view; html += `<div class="subtabs secnav" role="tablist">${subs.map(([v, l]) => `<button class="subtab" role="tab" data-nav="${v}" aria-selected="${cur === v}">${l}</button>`).join('')}</div>`; }
-  const V = {fin: viewFin, orgs: viewOrgs, payees: viewOrgs, org: viewOrg, agent: viewAgent, runs: viewRuns, run: viewRun, deals: viewDeals, pricing: viewOrgs, costs: viewPricing, procs: viewPricing, schedule: viewSchedule, cid: viewCid, customer: viewCustomer, merchant: viewMerchant, orders: viewOrders, maint: viewMaint, users: viewUsers};
+  if (subs.length > 1) { const cur = {run: 'runs', customer: 'cid', merchant: 'cid', org: 'orgs', agent: 'orgs', payees: 'orgs', partner: 'partners', schedule: schedKind() === 'cost' ? 'costs' : 'pricing'}[S.view] || S.view; html += `<div class="subtabs secnav" role="tablist">${subs.map(([v, l]) => `<button class="subtab" role="tab" data-nav="${v}" aria-selected="${cur === v}">${l}</button>`).join('')}</div>`; }
+  const V = {partners: viewPartners, partner: viewPartner, fin: viewFin, orgs: viewOrgs, payees: viewOrgs, org: viewOrg, agent: viewAgent, runs: viewRuns, run: viewRun, deals: viewDeals, pricing: viewOrgs, costs: viewPricing, procs: viewPricing, schedule: viewSchedule, cid: viewCid, customer: viewCustomer, merchant: viewMerchant, orders: viewOrders, maint: viewMaint, users: viewUsers};
   html += (V[S.view] || viewFin)();
   main.innerHTML = html;
   if (keep) { const el = document.getElementById(keep.id); if (el) { el.focus(); try { el.setSelectionRange(keep.s, keep.e); } catch {} } }
@@ -538,7 +544,7 @@ function viewRun() {
   if ((t.overDeals || []).length) h += `<div class="note">${t.overDeals.length} deal${t.overDeals.length > 1 ? 's pay' : ' pays'} out more than 100% once overrides are added, so Payvori's share is negative on ${t.overDeals.length > 1 ? 'them' : 'it'}: ${t.overDeals.slice(0, 4).map(esc).join('; ')}${t.overDeals.length > 4 ? '…' : ''}.</div>`;
   if ((r.dupMids || []).length) h += `<div class="note">${r.dupMids.length} MID${r.dupMids.length > 1 ? 's appear' : ' appears'} in more than one processor's report and ${r.dupMids.length > 1 ? 'were' : 'was'} added together: ${r.dupMids.slice(0, 5).map(x => esc(x.mid) + ' (' + x.procs.map(esc).join(', ') + ')').join('; ')}${r.dupMids.length > 5 ? '…' : ''}. Check that this is expected.</div>`;
   if ((r.sources || []).length) h += `<div class="sec-title" style="margin-top:0"><h2>Processor reports</h2><span class="label">${r.sources.length}</span></div><div class="tbl-wrap" style="margin-bottom:24px"><table><thead><tr><th>Processor</th><th>File</th><th class="r">Rows</th><th class="r">Residual</th><th>Uploaded</th><th class="r"></th></tr></thead><tbody>${r.sources.map(x => `<tr><td class="cell-main">${esc(x.processorName)}</td><td class="muted">${esc(x.file)}</td><td class="r num">${x.rows}</td><td class="r num">${money(x.net)}</td><td class="muted">${esc(dateLabel(x.uploadedAt))} · ${esc(who(x.uploadedBy))}</td><td class="r" style="white-space:nowrap">${r.status === 'draft' ? `<button class="btn ghost sm" data-act="add-report" data-proc="${esc(x.processorId)}">Replace</button><button class="btn ghost sm" data-act="remove-src" data-id="${esc(x.id)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
-  const tabs = [['payees', 'Payouts by agent', Object.keys(pt).length], ['report', 'Residual report', t.merchants || (t.lines || 0) + (t.unmatchedCount || 0)], ['deals', 'By deal', t.lines || 0], ['unmatched', 'Unmatched', t.unmatchedCount || 0]];
+  const tabs = [['payees', 'Payouts by agent', Object.keys(pt).length], ['report', 'Residual report', t.merchants || (t.lines || 0) + (t.unmatchedCount || 0)], ['deals', 'By deal', t.lines || 0], ...((r.referrals || []).length ? [['referrals', 'Referral partners', r.referrals.length]] : []), ['unmatched', 'Unmatched', t.unmatchedCount || 0]];
   h += `<div class="subtabs" role="tablist">${tabs.map(([k, l, c]) => `<button class="subtab" role="tab" aria-selected="${S.runTab === k}" data-act="tab" data-tab="${k}">${l}<span class="count">${c}</span></button>`).join('')}</div>`;
   if (S.runTab === 'payees') {
     const rows = Object.entries(pt).map(([id, x]) => ({id, ...x, name: payeeById(id)?.name || x.name})).sort((a, b) => b.amount - a.amount);
@@ -559,6 +565,13 @@ function viewRun() {
     h += `<p class="muted" style="font-size:13px;margin-top:10px">Due = earned + carried-in balance${hasPrior ? ' − already paid for this month' : ''}. A negative result is not paid; it carries into the next run and is netted against that month's earnings.</p>`;
     return h;
   }
+  if (S.runTab === 'referrals') {
+    const rs = r.referrals || [];
+    h += `<div class="split-sum" style="margin-bottom:12px"><span>Paid by Payvori <b class="num">${money(sum(rs.filter(x => x.mode === 'payvori'), x => x.amount))}</b></span><span>Owed by organizations <b class="num">${money(sum(rs.filter(x => x.mode !== 'payvori'), x => x.amount))}</b></span></div>`;
+    h += `<div class="tbl-wrap"><table><thead><tr><th>Partner</th><th>Organization</th><th>Who pays</th><th class="r">Merchants</th><th class="r">Org share</th><th class="r">Referral</th><th class="r"></th></tr></thead><tbody>${rs.map(x => `<tr><td><a href="#" data-act="open-partner" data-id="${esc(x.partnerId)}" class="cell-main" style="color:inherit">${esc(payeeName(x.partnerId) || x.name)}</a><div class="cell-sub">${esc(payeeById(x.partnerId)?.partnerNo || '')}</div></td><td>${esc(orgName(x.orgId))}</td><td>${refPill(x.mode)}</td><td class="r num">${x.merchants}</td><td class="r num">${money(x.base)}</td><td class="r num" style="font-weight:600">${money(x.amount)}</td>
+      <td class="r"><button class="btn ghost sm" data-act="ref-report" data-run="${esc(r.id)}" data-org="${esc(x.orgId)}">${ic('file')}Org report</button></td></tr>`).join('')}</tbody></table></div>`;
+    return h + `<p class="muted" style="font-size:13px;margin-top:10px">Payvori-paid referrals come out of the organization's share and appear under Payouts. Org-paid referrals don't change any payout; the organization pays its partners using the org report.</p>`;
+  }
   if (!S.detail) return h + `<div class="empty"><p>Loading run detail…</p></div>`;
   if (S.runTab === 'report') return h + viewResidualReport(r);
   if (S.runTab === 'deals') {
@@ -566,7 +579,7 @@ function viewRun() {
     if (!lines.length) return h + `<div class="empty"><p>No merchants in the report matched a deal.</p></div>`;
     h += `<div class="tbl-wrap"><table><thead><tr><th>Merchant</th><th class="r">Net residual</th><th>Payouts</th><th class="r">House</th></tr></thead><tbody>`;
     for (const l of lines) h += `<tr><td><div class="cell-main">${esc(l.merchant)}</div><div class="cell-sub">MID ${esc(l.mid)}${l.splitFrom !== undefined ? ' · split ' + esc(fromLabel(l.splitFrom).toLowerCase()) : ''}</div></td><td class="r num">${money(l.net)}</td>
-      <td><div class="chips">${l.splits.map(s => `<span class="chip ${s.kind === 'override' ? 'house' : ''}">${s.kind === 'override' ? 'Override · ' : ''}${esc(payeeById(s.payeeId)?.name || s.name)} <b>${pct(s.pct)} · ${money(s.amount)}</b></span>`).join('') || '<span class="muted">No splits</span>'}</div></td><td class="r num">${money(l.house)}</td></tr>`;
+      <td><div class="chips">${l.splits.map(s => `<span class="chip ${s.kind ? 'house' : ''}">${s.kind === 'override' ? 'Override · ' : s.kind === 'referral' ? 'Referral · ' : ''}${esc(payeeById(s.payeeId)?.name || s.name)} <b>${s.kind === 'referral' ? pct(s.refPct) + ' of org' : pct(s.pct)} · ${money(s.amount)}</b></span>`).join('')}${(l.referrals || []).filter(x => x.mode !== 'payvori').map(x => `<span class="chip">Referral, org pays · ${esc(payeeName(x.partnerId) || x.name)} <b>${pct(x.pct)} of org · ${money(x.amount)}</b></span>`).join('')}${l.splits.length ? '' : '<span class="muted">No splits</span>'}</div></td><td class="r num">${money(l.house)}</td></tr>`;
     return h + `</tbody></table></div>`;
   }
   const um = [...S.detail.unmatched].sort((a, b) => b.net - a.net);
@@ -658,10 +671,11 @@ function calculate(rows, month, priorPaid) {
     if (!d) { unmatched.push({mid: r.mid, merchant: r.fileMerchant, net: r.net, proc}); continue; }
     const ver = splitsFor(d, month);
     const splits = ver.splits.filter(s => s.payeeId && +s.pct > 0).map(s => ({payeeId: s.payeeId, name: payeeName(s.payeeId), pct: +s.pct, amount: Math.round(r.net * (+s.pct) / 100), paidTo: payTarget(s.payeeId, month)}));
+    const refs = applyReferrals(d, splits, r.net, month);
     for (const o of dealOverrides(d, month)) splits.push({payeeId: o.agentId, name: payeeName(o.agentId), pct: o.pct, amount: Math.round(r.net * o.pct / 100), paidTo: payTarget(o.agentId, month), kind: 'override', onOrg: o.orgId});
     const house = r.net - sum(splits, s => s.amount);
-    if (sum(splits, s => s.pct) > 100.0001) overDeals.push(d.merchant + ' (' + d.mid + ')');
-    lines.push({dealId: d.id, merchant: d.merchant, mid: d.mid, fileMerchant: r.fileMerchant, net: r.net, splits, house, splitFrom: ver.from, proc});
+    if (sum(splits.filter(s => s.kind !== 'referral'), s => s.pct) > 100.0001) overDeals.push(d.merchant + ' (' + d.mid + ')');
+    lines.push({dealId: d.id, merchant: d.merchant, mid: d.mid, fileMerchant: r.fileMerchant, net: r.net, splits, house, splitFrom: ver.from, proc, ...(refs.length ? {referrals: refs} : {})});
     for (const s of splits) { const t = payeeTotals[s.paidTo] ||= {name: payeeName(s.paidTo), earned: 0, deals: 0, byAgent: {}}; t.earned += s.amount; t.deals++; t.byAgent[s.payeeId] = (t.byAgent[s.payeeId] || 0) + s.amount; }
   }
   const carry = carryFor(month);
@@ -675,8 +689,9 @@ function calculate(rows, month, priorPaid) {
   const dupMids = [...byMid.values()].filter(x => x.procs.size > 1).slice(0, 50).map(x => ({mid: x.mid, procs: [...x.procs]}));
   const file = {};
   for (const x of stmts) for (const [k, v] of Object.entries(x.d)) if (typeof v === 'number' && !NON_SUM.test(k)) file[k] = Math.round(((file[k] || 0) + v) * 100) / 100;
-  return {lines, unmatched, payeeTotals, stmts, carryFrom: carry.from, totals: {
-    rows: rows.length, merchants: byMid.size, dupMids, overDeals: overDeals.slice(0, 50), overrides: sum(lines, l => sum(l.splits.filter(x => x.kind === 'override'), x => x.amount)), file: stmts.length ? file : null, net: matchedNet + unmatchedNet, matchedNet, partners, house: matchedNet - partners, unmatchedNet, lines: lines.length, unmatchedCount: unmatched.length,
+  const referrals = referralSummary(lines);
+  return {lines, unmatched, payeeTotals, stmts, referrals, carryFrom: carry.from, totals: {
+    rows: rows.length, merchants: byMid.size, dupMids, overDeals: overDeals.slice(0, 50), overrides: sum(lines, l => sum(l.splits.filter(x => x.kind === 'override'), x => x.amount)), referralsPaid: sum(referrals.filter(x => x.mode === 'payvori'), x => x.amount), referralsOrg: sum(referrals.filter(x => x.mode !== 'payvori'), x => x.amount), file: stmts.length ? file : null, net: matchedNet + unmatchedNet, matchedNet, partners, house: matchedNet - partners, unmatchedNet, lines: lines.length, unmatchedCount: unmatched.length,
     carryIn: sum(vals, t => t.carryIn), priorPaid: sum(vals, t => t.priorPaid), payable: sum(vals, t => Math.max(0, t.amount)), carryOut: sum(vals, t => Math.min(0, t.amount)),
   }};
 }
@@ -693,7 +708,7 @@ async function saveRun(month, calc, meta, prev) {
   await db.doc(`runs/${month}`).set({
     stmtChunks: sc.length, stmtIndex,
     month, status: 'draft', sources: meta.sources ?? prev?.sources ?? [], dupMids: calc.totals.dupMids || [], sourceFile: meta.sourceFile || prev?.sourceFile || '', calculatedAt: nowIso(), uploadedBy: S.uid || null,
-    totals: calc.totals, payeeTotals: calc.payeeTotals, paid: {}, lineChunks: lc.length, unmatchedChunks: uc.length,
+    totals: calc.totals, payeeTotals: calc.payeeTotals, referrals: calc.referrals || [], paid: {}, lineChunks: lc.length, unmatchedChunks: uc.length,
     carryFrom: calc.carryFrom || null, priorPaid: meta.priorPaid || prev?.priorPaid || {},
     history: [...(prev?.history || []), histEntry(meta.action || 'Calculated', meta.note)].slice(-200),
   });
@@ -748,7 +763,7 @@ function payeeModal(p, preset) {
     <div class="grid3"><div class="field"><label for="p-agentno">Org number</label><input type="text" id="p-agentno" class="mono" value="${esc(p.agentNo || '')}" placeholder="Assigned on save" readonly tabindex="-1" style="background:var(--panel-2)"><span class="hint">Assigned automatically and never reused.</span></div><div class="field"><label for="p-name">Name</label><input type="text" id="p-name" value="${esc(p.name || '')}" placeholder="Company, office or person" autocomplete="off"></div>
     <div class="field"><label for="p-role">Type</label><select id="p-role">${ROLES.concat(p.role && !ROLES.includes(p.role) ? [p.role] : []).map(r => `<option ${r === p.role ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div></div>
     <div class="grid2">${fld('p-status', 'Status', selBox('p-status', ORG_STATUS, p.status || 'Active'))}${fld('p-agree', 'Agreement signed', tin('p-agree', p.agreementDate, '', 'date'))}</div>
-    <div class="grid3">${fld('p-contact', 'Main contact', tin('p-contact', p.contactName))}<div class="field"><label for="p-email">Statement email</label><input type="email" id="p-email" value="${esc(p.email || '')}" placeholder="Where statements go"></div>${fld('p-phone', 'Phone', tin('p-phone', p.phone))}</div>
+    <div class="grid3">${fld('p-contact', 'Contact name', tin('p-contact', p.contactName))}<div class="field"><label for="p-email">Statement email</label><input type="email" id="p-email" value="${esc(p.email || '')}" placeholder="Where statements go"></div>${fld('p-phone', 'Phone', tin('p-phone', p.phone))}</div>
     <div class="grid2">${fld('p-pvemail', 'Payvori email', tin('p-pvemail', p.payvoriEmail, 'name@payvori.com', 'email'), '', 'Their Payvori company address, if they have one.')}${fld('p-prshare', 'Payroll + Benefits share, %', `<input type="number" id="p-prshare" min="0" max="100" step="0.01" value="${p.prShare != null ? esc(p.prShare) : ''}" placeholder="Same as above it, or 50">`, '', 'Used for payroll pricing in the Sales Portal.')}</div>
     <div class="grid2">${fld('p-addr', 'Street address', tin('p-addr', p.address, '123 Main St'))}${fld('p-addr2', 'Suite / unit', tin('p-addr2', p.address2, 'Suite 200'))}</div>
     <div class="grid3">${fld('p-city', 'City', tin('p-city', p.city))}${fld('p-state', 'State', tin('p-state', p.state, 'FL'))}${fld('p-zip', 'ZIP', tin('p-zip', p.zip, '', 'text', 'mono'))}</div>
@@ -777,7 +792,7 @@ function payeeModal(p, preset) {
     const mode = $('#p-mode', m).value;
     const paSame = isNew && $('#p-pa-same', m).checked, paName = isNew ? (paSame ? name : $('#p-pa-name', m).value.trim()) : '', paRef = isNew ? $('#p-pa-ref', m).value.trim() : '';
     if (isNew && !paName) { $('#p-pa-name', m).focus(); toast('Enter the primary agent name.'); return; }
-    if (paRef && S.payees.some(x => isAgent(x) && String(x.payRef || '').trim().toLowerCase() === paRef.toLowerCase())) { $('#p-pa-ref', m).focus(); toast(`Payroll number ${paRef} is already used by another agent.`); return; }
+    if (paRef && S.payees.some(x => (isAgent(x) || isPartner(x)) && String(x.payRef || '').trim().toLowerCase() === paRef.toLowerCase())) { $('#p-pa-ref', m).focus(); toast(`Payroll number ${paRef} is already used by another agent.`); return; }
     let history = null, primaryId = p.primaryAgentId || '';
     if (!isNew) {
       const from = $('#p-from', m).value, chosen = $('#p-primary', m).value;
@@ -1042,7 +1057,7 @@ function dealImportModal() {
 /* ---------- statements & exports ---------- */
 function statementData(r, payeeId, detail) {
   const items = [];
-  for (const l of detail.lines) for (const s of l.splits) if ((s.paidTo || s.payeeId) === payeeId) items.push({merchant: l.merchant, mid: l.mid, net: l.net, pct: s.pct, amount: s.amount, agent: s.payeeId, kind: s.kind || '', onOrg: s.onOrg || ''});
+  for (const l of detail.lines) for (const s of l.splits) if ((s.paidTo || s.payeeId) === payeeId) items.push({merchant: l.merchant, mid: l.mid, net: s.kind === 'referral' ? s.base : l.net, pct: s.kind === 'referral' ? s.refPct : s.pct, amount: s.amount, agent: s.payeeId, kind: s.kind || '', onOrg: s.onOrg || '', refs: s.refs || [], base: s.base, orgRefs: !s.kind ? (l.referrals || []).filter(x => x.mode !== 'payvori' && x.orgId === orgIdOf(s.payeeId)) : []});
   items.sort((a, b) => b.amount - a.amount);
   const pe = payeeById(payeeId); const t = r.payeeTotals?.[payeeId];
   const earned = sum(items, i => i.amount);
@@ -1052,8 +1067,10 @@ function statementBody(r, s) {
   return `<div class="stmt"><div class="stmt-head"><div><div class="eyebrow">Residual statement</div><h3 style="font-size:22px;letter-spacing:-.02em">${esc(s.name)}</h3><div class="muted">${esc(s.role)}${s.email ? ' · ' + esc(s.email) : ''}</div></div>
     <div class="right"><div class="label">Period</div><div style="font-weight:600">${esc(monthLabel(r.month))}</div><div class="cell-sub" style="margin-top:4px">${esc(s.ref)}</div></div></div>
     <div class="tbl-wrap" style="border:0"><table><thead><tr><th>Merchant</th>${s.multi ? '<th>Agent</th>' : ''}<th class="r">Net residual</th><th class="r">${s.multi ? 'Share' : 'Your share'}</th><th class="r">Earned</th></tr></thead><tbody>
-    ${s.items.map(i => `<tr><td><div class="cell-main">${esc(i.merchant)}</div><div class="cell-sub">MID ${esc(i.mid)}${i.kind === 'override' ? ' · Override on ' + esc(orgName(i.onOrg)) : ''}</div></td>${s.multi ? `<td>${esc(payeeName(i.agent))}<div class="cell-sub">${esc(payeeById(i.agent)?.agentNo || '')}</div></td>` : ''}<td class="r num">${money(i.net)}</td><td class="r num">${pct(i.pct)}</td><td class="r num">${money(i.amount)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No residuals this period.</td></tr>'}
+    ${s.items.map(i => `<tr><td><div class="cell-main">${esc(i.merchant)}</div><div class="cell-sub">MID ${esc(i.mid)}${i.kind === 'override' ? ' · Override on ' + esc(orgName(i.onOrg)) : i.kind === 'referral' ? ' · Referral on ' + esc(orgName(i.onOrg)) + ' · % of the organization share' : ''}${i.refs?.length ? ' · after referral to ' + i.refs.map(x => esc(payeeName(x.partnerId)) + ' ' + money(x.amount)).join(', ') : ''}</div></td>${s.multi ? `<td>${esc(payeeName(i.agent))}<div class="cell-sub">${esc(payeeById(i.agent)?.agentNo || '')}</div></td>` : ''}<td class="r num">${money(i.net)}</td><td class="r num">${pct(i.pct)}</td><td class="r num">${money(i.amount)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No residuals this period.</td></tr>'}
     </tbody></table></div>
+    ${(() => { const orf = s.items.flatMap(i => i.orgRefs || []).filter((x, k, arr) => arr.indexOf(x) === k); const seen = new Set(); const rows = s.items.flatMap(i => (i.orgRefs || []).filter(x => { const key = i.mid + '|' + x.partnerId; if (seen.has(key)) return false; seen.add(key); return true; }).map(x => ({...x, merchant: i.merchant, mid: i.mid})));
+      return rows.length ? `<div class="label" style="margin:16px 0 6px">Referral partners your organization pays</div><div class="tbl-wrap" style="border:0"><table><thead><tr><th>Partner</th><th>Merchant</th><th class="r">Org share</th><th class="r">%</th><th class="r">You owe</th></tr></thead><tbody>${rows.map(x => `<tr><td>${esc(payeeName(x.partnerId) || x.name)}</td><td>${esc(x.merchant)}<div class="cell-sub">MID ${esc(x.mid)}</div></td><td class="r num">${money(x.base)}</td><td class="r num">${pct(x.pct)}</td><td class="r num">${money(x.amount)}</td></tr>`).join('')}<tr><td colspan="4"><b>Total owed to referral partners</b></td><td class="r num"><b>${money(sum(rows, x => x.amount))}</b></td></tr></tbody></table></div><p class="muted" style="font-size:12px">Not deducted from this statement. Your organization pays these partners directly.</p>` : ''; })()}
     <table class="ledger"><tbody>
       ${s.multi ? `<tr><td colspan="2" class="muted">Paid to the primary agent for all of the organization's agents. Each line shows which agent earned it.</td></tr>` : ''}
       <tr><td>Earned this period · ${s.items.length} merchants</td><td class="r num">${money(s.total)}</td></tr>
@@ -1164,7 +1181,7 @@ const actions = {
   'deal-from': d => merchantModal(null, {mid: d.mid, dba: d.name, newCustomer: true}),
   'import-deals': () => dealImportModal(),
   'new-payee': () => payeeModal(null),
-  'edit-payee': d => { const x = payeeById(d.id); isAgent(x) ? agentModal(x) : payeeModal(x); },
+  'edit-payee': d => { const x = payeeById(d.id); isAgent(x) ? agentModal(x) : isPartner(x) ? partnerModal(x) : payeeModal(x); },
   'tpl-deals': () => downloadDealTemplate(),
   'tpl-residual-old': () => saveFile('sample-residual-report.csv', toCSV([['Merchant ID', 'DBA Name', 'Sales Volume', 'Transactions', 'Net Residual'], ['4445001234567', 'Example Coffee Co', '84210.55', '3120', '612.40'], ['4445009876543', 'Example Auto Repair', '151002.10', '402', '1288.95'], ['', 'Report total', '235212.65', '3522', '1901.35']])),
   'replace-file': () => { const r = runById(S.runId); if (r) importModal(r.month, {lockMonth: true}); },
@@ -1541,14 +1558,14 @@ viewRun = function () {
    ====================================================================== */
 const SECTIONS = [
   {key: 'fin', label: 'Financials', views: ['fin']},
-  {key: 'orgs', label: 'Organizations', views: ['orgs', 'payees', 'org', 'agent']},
+  {key: 'orgs', label: 'Organizations', views: ['orgs', 'payees', 'org', 'agent', 'partners', 'partner']},
   {key: 'res', label: 'Residuals', views: ['runs', 'run']},
   {key: 'cid', label: 'CID', views: ['cid', 'customer', 'deals', 'merchant']},
   {key: 'orders', label: 'Order Entry', views: ['orders']},
   {key: 'maint', label: 'File Maintenance', views: ['costs', 'procs']},
   {key: 'users', label: 'Users', views: ['users']},
 ];
-const SUBNAV = {maint: [['costs', 'Our costs'], ['procs', 'Processors']], cid: [['cid', 'Customers'], ['deals', 'Merchants']]};
+const SUBNAV = {orgs: [['orgs', 'Organizations'], ['partners', 'Referral partners']], maint: [['costs', 'Our costs'], ['procs', 'Processors']], cid: [['cid', 'Customers'], ['deals', 'Merchants']]};
 const ROLE_DEF = {
   'Admin': {sections: ['fin', 'orgs', 'pricing', 'res', 'cid', 'orders', 'users'], write: true, desc: 'Every section, including user maintenance.'},
   'Finance': {sections: ['fin', 'orgs', 'pricing', 'res', 'cid'], write: true, desc: 'Financials, residuals, organizations with their pricing, customers, and file maintenance (costs and processors).'},
@@ -1605,9 +1622,9 @@ function stPill(s) {
 const opt = (v, label, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(label)}</option>`;
 const selBox = (id, list, cur) => `<select id="${id}">${list.map(x => opt(x, x, cur)).join('')}</select>`;
 const isAgent = p => p?.kind === 'agent';
-const orgList = () => S.payees.filter(p => !isAgent(p));
+const orgList = () => S.payees.filter(p => isOrg(p));
 const agentsOf = orgId => S.payees.filter(p => isAgent(p) && (p.orgId || '') === (orgId || ''));
-const orgIdOf = id => { const p = payeeById(id); return !p ? '' : isAgent(p) ? (p.orgId || '') : p.id; };
+const orgIdOf = id => { const p = payeeById(id); return !p ? '' : isAgent(p) ? (p.orgId || '') : isPartner(p) ? '' : p.id; };
 const PAYOUT = {each: 'Pay each agent', primary: 'Pay the primary agent for all agents'};
 function payoutFor(org, month) {
   let hit = null;
@@ -1691,11 +1708,11 @@ function viewFin() {
   // payouts by organization
   const byOrg = new Map();
   const agentsPaid = new Map();
-  for (const r of S.runs) if (r.month.startsWith(y)) for (const [id, t] of Object.entries(r.payeeTotals || {})) { const k = orgIdOf(id); byOrg.set(k, (byOrg.get(k) || 0) + (t.earned ?? t.amount ?? 0)); if (!agentsPaid.has(k)) agentsPaid.set(k, new Set()); agentsPaid.get(k).add(id); }
+  for (const r of S.runs) if (r.month.startsWith(y)) for (const [id, t] of Object.entries(r.payeeTotals || {})) { const k = isPartner(payeeById(id)) ? '__ref' : orgIdOf(id); byOrg.set(k, (byOrg.get(k) || 0) + (t.earned ?? t.amount ?? 0)); if (!agentsPaid.has(k)) agentsPaid.set(k, new Set()); agentsPaid.get(k).add(id); }
   if (byOrg.size) {
     const list = [...byOrg.entries()].sort((a, b) => b[1] - a[1]);
     h += `<div class="sec-title"><h2>Payouts by organization</h2></div><div class="tbl-wrap"><table><thead><tr><th>Organization</th><th class="r">Agents paid</th><th class="r">Earned in ${esc(y)}</th><th class="r">Share</th></tr></thead><tbody>
-      ${list.map(([id, v]) => `<tr><td class="cell-main">${id ? esc(payeeName(id)) : '<span class="muted">No organization</span>'}</td><td class="r num">${agentsPaid.get(id)?.size || 0}</td><td class="r num">${money(v)}</td><td class="r num muted">${pay ? pct(Math.round(v / pay * 1000) / 10) : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+      ${list.map(([id, v]) => `<tr><td class="cell-main">${id === '__ref' ? 'Referral partners (paid by Payvori)' : id ? esc(payeeName(id)) : '<span class="muted">No organization</span>'}</td><td class="r num">${agentsPaid.get(id)?.size || 0}</td><td class="r num">${money(v)}</td><td class="r num muted">${pay ? pct(Math.round(v / pay * 1000) / 10) : '—'}</td></tr>`).join('')}</tbody></table></div>`;
   }
   h += taxYearSection(y);
   const led = S.ledger.filter(e => (e.date || '').startsWith(y));
@@ -1907,6 +1924,7 @@ function viewMerchant() {
     <div class="split-sum" style="margin-bottom:10px"><div style="flex:1 1 160px">${splitBar([...sp, ...ovs.map(o => ({pct: o.pct}))])}</div><div class="chips">${splitChips(sp, ovs)}</div><span>Payvori keeps <b class="num ${tot > 100 ? 'over' : ''}">${pct(Math.round((100 - tot) * 1000) / 1000)}</b></span></div>`;
   const vs = versionsOf(x);
   if (vs.length > 1) h += `<div class="tbl-wrap"><table><thead><tr><th>Applies</th><th>Split</th><th>Changed</th></tr></thead><tbody>${[...vs].map((v, i) => ({v, i})).reverse().map(({v, i}) => `<tr><td>${esc(versionLabel(vs, i))}</td><td><div class="chips">${splitChips(v.splits || [])}</div></td><td class="muted" style="font-size:13px">${v.at ? esc(dateLabel(v.at)) + ' · ' + esc(who(v.by)) : '—'}${v.note ? ' · ' + esc(v.note) : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  if ((x.referrals || []).length) h += `<div class="sec-title"><h2>Referral partners</h2><span class="label">${x.referrals.length}</span></div><div class="tbl-wrap"><table><thead><tr><th>Partner</th><th class="r">% of ${esc(orgName(x.orgId) || 'org')} share</th><th>Dates</th><th>Who pays</th></tr></thead><tbody>${x.referrals.map(r => { const p = payeeById(r.partnerId); return `<tr class="click" data-act="open-partner" data-id="${esc(r.partnerId)}" tabindex="0"><td><div class="cell-main">${esc(p ? partnerLabel(p) : 'Removed partner')}</div></td><td class="r num">${pct(r.pct)}</td><td class="muted">${esc(refSpan(r))}</td><td>${p ? refPill(refModeFor(p, x.orgId, om)) : ''}</td></tr>`; }).join('')}</tbody></table></div>`;
   const runs = S.runs.filter(r => r.stmtIndex?.[normMid(x.mid)]);
   h += `<div class="sec-title"><h2>Statements</h2><span class="label">${runs.length}</span></div>` + (runs.length
     ? `<div class="tbl-wrap"><table><thead><tr><th>Month</th><th>Run</th><th class="r">Sales volume</th><th class="r">Residual to Payvori</th></tr></thead><tbody>${runs.map(r => `<tr class="click" data-act="mstmt" data-run="${esc(r.id)}" data-mid="${esc(x.mid)}" tabindex="0"><td class="cell-main">${esc(monthLabel(r.month))}</td><td>${runStatus(r)}</td><td class="r num">${money(r.stmtIndex[normMid(x.mid)].v)}</td><td class="r num">${money(r.stmtIndex[normMid(x.mid)].r)}</td></tr>`).join('')}</tbody></table></div>`
@@ -2002,6 +2020,7 @@ function merchantModal(d, prefill) {
       <div><button class="btn sm" id="d-add">${ic('plus')}Add agent to split</button></div>
       <div class="split-sum" id="d-sum"></div>
       <div id="d-ovr"></div>
+      <div id="d-refs" class="stack" style="gap:10px"></div>
       <div id="d-warn"></div>
       ${isNew ? '' : `<div class="field"><label for="d-why">Reason for split change</label><input type="text" id="d-why" placeholder="For example: second agent added per new agreement"></div>`}
     </div>
@@ -2034,7 +2053,8 @@ function merchantModal(d, prefill) {
   const agentToSplit = () => { const a = $('#m-agent', m).value;
     if (isNew && (splits.length === 1 && (!splits[0].payeeId || splits[0].payeeId === lastAgent))) { splits[0].payeeId = a; drawRows(); }
     lastAgent = a; };
-  $('#m-org', m).addEventListener('change', () => { const o = payeeById($('#m-org', m).value), sc = orgSchedules(o?.id || ''); fillAgent(o?.primaryAgentId || ''); fillSched(sc.length === 1 ? sc[0].id : ''); syncPlat(); agentToSplit(); $('#d-ovr', m).innerHTML = ''; drawSum(); });
+  let refEd = null;
+  $('#m-org', m).addEventListener('change', () => { refEd?.redraw(); const o = payeeById($('#m-org', m).value), sc = orgSchedules(o?.id || ''); fillAgent(o?.primaryAgentId || ''); fillSched(sc.length === 1 ? sc[0].id : ''); syncPlat(); agentToSplit(); $('#d-ovr', m).innerHTML = ''; drawSum(); });
   $('#m-agent', m).addEventListener('change', agentToSplit);
   $('#m-sched', m).addEventListener('change', syncPlat);
   const fillEnds = () => {
@@ -2131,6 +2151,7 @@ function merchantModal(d, prefill) {
   $('#d-example', m).addEventListener('input', drawSum);
   $('#d-add', m).onclick = () => { splits.push({payeeId: '', pct: ''}); drawRows(); $(`#d-sp-${splits.length - 1}`, m)?.focus(); };
   drawRows(); drawHist();
+  refEd = referralEditor(m, d, () => $('#m-org', m).value, () => { const ex = parseMoney($('#d-example', m).value) || 0; const o = $('#m-org', m).value; return Math.round(ex * sum(splits.filter(s => s.payeeId && orgIdOf(s.payeeId) === o), s => +s.pct || 0) / 100); });
   $('#d-save', m).onclick = e => {
     const dba = val(m, 'm-dba'), mid = val(m, 'm-mid'), cm = custMode();
     if (cm === 'new' && !val(m, 'm-cname')) { $('#m-cname', m).focus(); return toast('Enter the customer’s legal name.'); }
@@ -2141,6 +2162,7 @@ function merchantModal(d, prefill) {
     if (dup) { $('#m-mid', m).focus(); return toast(`MID ${mid} is already on ${dup.dba} (${dup.merchNo}).`); }
     if (!$('#m-org', m).value) { $('#m-org', m).focus(); return toast('Choose the organization.'); }
     if (!$('#m-agent', m).value) { $('#m-agent', m).focus(); return toast('Choose the agent.'); }
+    const rv = refEd.value(); if (rv.err) return toast(rv.err);
     const clean = splits.filter(s => s.payeeId && +s.pct > 0).map(s => ({payeeId: s.payeeId, pct: +s.pct}));
     const ids = clean.map(s => s.payeeId); if (new Set(ids).size !== ids.length) return toast('Each agent can appear once per merchant. Combine their percentages.');
     if (sum(clean, s => s.pct) > 100) return;
@@ -2158,7 +2180,7 @@ function merchantModal(d, prefill) {
     const status = val(m, 'm-status');
     const data = {dba, mid, status, openedDate: val(m, 'm-open'), closedDate: val(m, 'm-closed') || (status === 'Closed' && d.status !== 'Closed' ? todayIso() : ''), address: val(m, 'm-addr'), address2: val(m, 'm-addr2'), city: val(m, 'm-city'), state: val(m, 'm-state').toUpperCase(), zip: val(m, 'm-zip'),
       orgId: val(m, 'm-org'), agentId: val(m, 'm-agent'), scheduleId: val(m, 'm-sched'), platform, frontEnd: platform ? $('#d-fe', m).value : '', backEnd: platform ? $('#d-be', m).value : '', processor: platform ? platLabel(pid, plid) : '',
-      overrideRule: ovrRule(), notes: val(m, 'd-notes'), versions: next, splits: splitsFor({versions: next}, curMonth()).splits};
+      overrideRule: ovrRule(), referrals: rv.list, notes: val(m, 'd-notes'), versions: next, splits: splitsFor({versions: next}, curMonth()).splits};
     busy(e.currentTarget, async () => {
       try {
         if (isNew) {
@@ -2213,6 +2235,288 @@ Object.assign(actions, {
   'cust-tab': d => { S.custTab = d.tab; render(); },
   'cust-stmt': d => showCustomerStatement(d.run, d.id),
 });
+
+/* ---------- Referral partners ----------
+   A referral partner is one company-wide record (kind: 'partner') linked to any number of organizations.
+   Each link carries who pays the partner for that org (Payvori or the org), dated so it can change from a month.
+   Merchants name the partner and its % of the organization's share. Payvori-paid referrals come out of the org's
+   agents' earnings on that merchant; org-paid referrals are reporting only. Both are reported on every run. */
+const isPartner = p => p?.kind === 'partner';
+const isOrg = p => !!p && !isAgent(p) && !isPartner(p);
+const partnerList = () => S.payees.filter(isPartner).sort(byStr('name'));
+const partnerLinks = p => p?.orgLinks || [];
+const partnersOf = orgId => partnerList().filter(p => partnerLinks(p).some(l => l.orgId === orgId));
+const REF_MODE = {payvori: 'Payvori pays the partner', org: 'The organization pays the partner'};
+const REF_SHORT = {payvori: 'Payvori pays', org: 'Org pays'};
+const refPill = mode => mode === 'payvori' ? '<span class="pill approved">Payvori pays</span>' : '<span class="pill">Org pays</span>';
+const partnerLabel = p => `${p.partnerNo ? '#' + p.partnerNo + ' · ' : ''}${p.name}${p.status && p.status !== 'Active' ? ' (' + p.status + ')' : ''}`;
+function refModeFor(p, orgId, month) {
+  const l = partnerLinks(p).find(x => x.orgId === orgId); if (!l) return 'org';
+  let hit = null; for (const h of [...(l.modeHistory || [])].sort((a, b) => a.from.localeCompare(b.from))) if (h.from <= month) hit = h;
+  return hit?.mode || 'org';
+}
+const pendingMode = (l, month) => (l.modeHistory || []).filter(h => h.from > month).sort((a, b) => a.from.localeCompare(b.from))[0] || null;
+const activeReferrals = (d, month) => (d.referrals || []).filter(x => x.partnerId && +x.pct > 0 && (x.from || '0000-00') <= month && (!x.to || month <= x.to));
+const merchantsReferredBy = (pid, orgId) => S.merchants.filter(x => (x.referrals || []).some(r => r.partnerId === pid) && (!orgId || x.orgId === orgId));
+// Referral totals from saved runs, newest first: [{month, run, partnerId, orgId, mode, base, amount, merchants}]
+const refHistory = filter => S.runs.flatMap(r => (r.referrals || []).filter(filter).map(x => ({...x, month: r.month, run: r}))).sort((a, b) => b.month.localeCompare(a.month));
+
+// Applied inside calculate(): splits are the merchant's computed splits for the month (amounts in cents).
+function applyReferrals(d, splits, net, month) {
+  const refs = []; const orgId = dealOrgId(d);
+  for (const rf of activeReferrals(d, month)) {
+    const pp = payeeById(rf.partnerId); if (!pp) continue;
+    const base = splits.filter(s => !s.kind && (!orgId || orgIdOf(s.payeeId) === orgId));
+    const baseAmt = sum(base, s => s.gross ?? s.amount);
+    const mode = refModeFor(pp, orgId, month);
+    let amount = 0;
+    if (mode === 'payvori') {
+      for (const s of base) { const cut = Math.round((s.gross ?? s.amount) * rf.pct / 100); if (s.gross == null) s.gross = s.amount; s.amount -= cut; s.refOut = (s.refOut || 0) + cut; (s.refs ||= []).push({partnerId: rf.partnerId, amount: cut}); amount += cut; }
+      if (amount) splits.push({payeeId: rf.partnerId, name: pp.name, pct: net ? Math.round(amount / net * 100000) / 1000 : 0, amount, paidTo: rf.partnerId, kind: 'referral', onOrg: orgId, refPct: +rf.pct, base: baseAmt});
+    } else amount = Math.round(baseAmt * rf.pct / 100);
+    refs.push({partnerId: rf.partnerId, name: pp.name, orgId, pct: +rf.pct, base: baseAmt, amount, mode});
+  }
+  return refs;
+}
+function referralSummary(lines) {
+  const by = new Map();
+  for (const l of lines) for (const x of l.referrals || []) {
+    const k = x.partnerId + '|' + x.orgId; const t = by.get(k) || {partnerId: x.partnerId, name: x.name, orgId: x.orgId, mode: x.mode, base: 0, amount: 0, merchants: 0};
+    t.base += x.base; t.amount += x.amount; t.merchants++; by.set(k, t);
+  }
+  return [...by.values()].sort((a, b) => b.amount - a.amount);
+}
+
+/* ---------- list page ---------- */
+function viewPartners() {
+  const ps = partnerList(); const q = (S.partnerQ || '').toLowerCase();
+  const list = q ? ps.filter(p => [p.name, p.partnerNo, p.contactName, p.email, ...partnerLinks(p).map(l => orgName(l.orgId))].join(' ').toLowerCase().includes(q)) : ps;
+  let h = `<div class="page-head"><div><div class="eyebrow">${ps.length} referral partner${ps.length === 1 ? '' : 's'}</div><h1>Referral partners</h1>
+    <p class="muted" style="max-width:640px">People or businesses that refer merchants to an organization. They earn a percentage of the organization's share on the merchants they referred. Payvori pays them, or the organization does and Payvori provides the reporting.</p></div>
+    <div class="actions"><button class="btn primary" data-act="new-partner">${ic('plus')}Add referral partner</button></div></div>`;
+  if (!ready('payees')) return h + `<div class="empty"><p>Loading…</p></div>`;
+  if (!ps.length) return h + `<div class="empty"><h3>No referral partners yet</h3><p>Add one here, or from an organization's Referral partners tab.</p></div>`;
+  h += `<div class="toolbar"><input type="search" id="partner-q" placeholder="Search name, number, organization" value="${esc(S.partnerQ || '')}" aria-label="Search referral partners"></div>`;
+  h += `<div class="tbl-wrap"><table><thead><tr><th>Partner #</th><th>Partner</th><th>Organizations</th><th class="r">Merchants</th><th>W-9</th><th class="r">Latest month</th><th class="r">Paid by Payvori</th></tr></thead><tbody>`;
+  const om = nextOpenMonth();
+  for (const p of list) {
+    const last = refHistory(x => x.partnerId === p.id)[0]; const lastAmt = last ? sum(refHistory(x => x.partnerId === p.id).filter(x => x.month === last.month), x => x.amount) : 0;
+    h += `<tr class="click" data-act="open-partner" data-id="${esc(p.id)}" tabindex="0"><td class="num">${esc(p.partnerNo || '')}</td><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc([p.contactName, p.email].filter(Boolean).join(' · '))}</div></td>
+      <td><div class="chips">${partnerLinks(p).map(l => `<span class="chip">${esc(orgName(l.orgId))} <b>${esc(REF_SHORT[refModeFor(p, l.orgId, om)])}</b></span>`).join('') || '<span class="muted">Not linked</span>'}</div></td>
+      <td class="r num">${merchantsReferredBy(p.id).length}</td><td>${partnerNeedsW9(p) ? w9Pill(p) : '<span class="muted">Not needed</span>'}</td>
+      <td class="r">${last ? `<div class="num">${money(lastAmt)}</div><div class="cell-sub">${esc(monthShort(last.month))}</div>` : '<span class="muted">None</span>'}</td><td class="r num">${money(payeeStats(p.id).paid)}</td></tr>`;
+  }
+  return h + `</tbody></table></div>`;
+}
+const partnerNeedsW9 = p => partnerLinks(p).some(l => (l.modeHistory || []).some(h => h.mode === 'payvori')) || S.runs.some(r => r.payeeTotals?.[p.id]);
+
+/* ---------- partner page ---------- */
+function viewPartner() {
+  const p = payeeById(S.partnerId);
+  const back = S.partnerFrom && orgById(S.partnerFrom) ? `<button class="back" data-act="open-org" data-id="${esc(S.partnerFrom)}" data-tab="partners">${ic('back')}${esc(orgName(S.partnerFrom))}</button>` : `<button class="back" data-nav="partners">${ic('back')}All referral partners</button>`;
+  if (!p) return back + `<div class="empty"><p>${ready('payees') ? 'This referral partner no longer exists.' : 'Loading…'}</p></div>`;
+  const om = nextOpenMonth(); const links = partnerLinks(p); const ms = merchantsReferredBy(p.id); const st = payeeStats(p.id);
+  const hist = refHistory(x => x.partnerId === p.id); const lastM = hist[0]?.month; const lastRows = hist.filter(x => x.month === lastM);
+  const kv = (l, v) => `<div><span class="label">${l}</span>${v || '<span class="muted">—</span>'}</div>`;
+  let h = back + `<div class="page-head"><div><div class="eyebrow">Referral partner</div><h1>${esc(p.name)}</h1>
+    <div class="meta"><span>${stPill(p.status || 'Active')}</span>${p.partnerNo ? `<span>PARTNER # ${esc(p.partnerNo)}</span>` : ''}</div></div>
+    <div class="actions"><button class="btn" data-act="edit-payee" data-id="${esc(p.id)}">${ic('file')}Edit</button><button class="btn primary" data-act="link-partner" data-partner="${esc(p.id)}">${ic('plus')}Link to organization</button></div></div>`;
+  h += `<div class="tiles">
+    <div class="tile"><span class="label">Organizations</span><span class="v">${links.length}</span><span class="s">${links.filter(l => refModeFor(p, l.orgId, om) === 'payvori').length} paid by Payvori</span></div>
+    <div class="tile"><span class="label">Merchants referred</span><span class="v">${ms.length}</span><span class="s">${ms.filter(x => x.status === 'Active').length} active</span></div>
+    <div class="tile"><span class="label">Latest month</span><span class="v">${lastM ? money(sum(lastRows, x => x.amount)) : '—'}</span><span class="s">${lastM ? esc(monthLabel(lastM)) + ' · all organizations' : 'No runs yet'}</span></div>
+    <div class="tile ${st.balance ? 'neg' : ''}"><span class="label">Balance</span><span class="v">${money(st.balance)}</span><span class="s">Payvori-paid only</span></div>
+    <div class="tile"><span class="label">Paid by Payvori</span><span class="v">${money(st.paid)}</span><span class="s">All runs</span></div></div>`;
+  h += `<div class="kv">${kv('Partner number', esc(p.partnerNo || ''))}${kv('Contact name', esc(p.contactName || ''))}${kv('Email', esc(p.email || ''))}${kv('Phone', esc(p.phone || ''))}${kv('Address', addrLines(p).map(esc).join('<br>'))}${kv('Payroll number', esc(p.payRef || ''))}${kv('Payment method', esc(p.method || ''))}</div>`;
+  if (p.notes) h += `<div class="note info" style="margin-top:12px">${esc(p.notes)}</div>`;
+  h += `<div class="sec-title"><h2>Organizations</h2><span class="label">${links.length}</span></div>`;
+  h += links.length ? `<div class="tbl-wrap"><table><thead><tr><th>Organization</th><th>Who pays</th><th class="r">Merchants</th><th class="r">Latest month</th><th class="r"></th></tr></thead><tbody>${links.map(l => { const pm = pendingMode(l, om); const lr = lastRows.find(x => x.orgId === l.orgId);
+    return `<tr><td><a href="#" data-act="open-org" data-id="${esc(l.orgId)}" data-tab="partners" class="cell-main" style="color:inherit">${esc(orgName(l.orgId) || 'Removed organization')}</a></td><td>${refPill(refModeFor(p, l.orgId, om))}${pm ? `<div class="cell-sub">${esc(REF_SHORT[pm.mode])} from ${esc(monthShort(pm.from))}</div>` : ''}</td>
+      <td class="r num">${merchantsReferredBy(p.id, l.orgId).length}</td><td class="r num">${lr ? money(lr.amount) : '—'}</td><td class="r"><button class="btn ghost sm" data-act="link-partner" data-partner="${esc(p.id)}" data-org="${esc(l.orgId)}">Change</button></td></tr>`; }).join('')}</tbody></table></div>`
+    : `<p class="muted">Not linked to an organization yet. Link it to the organization it refers merchants to.</p>`;
+  h += `<div class="sec-title"><h2>Merchants referred</h2><span class="label">${ms.length}</span></div>`;
+  h += ms.length ? `<div class="tbl-wrap"><table><thead><tr><th>Merchant</th><th>Organization</th><th class="r">% of org share</th><th>Dates</th><th>Who pays</th></tr></thead><tbody>${ms.flatMap(x => (x.referrals || []).filter(r => r.partnerId === p.id).map(r => `<tr class="click" data-act="open-merchant" data-id="${esc(x.id)}" tabindex="0">
+      <td><div class="cell-main">${esc(x.dba)}</div><div class="cell-sub">${esc(x.merchNo || '')} · MID ${esc(x.mid)}</div></td><td>${esc(orgName(x.orgId))}</td><td class="r num">${pct(r.pct)}</td><td class="muted">${esc(refSpan(r))}</td><td>${refPill(refModeFor(p, x.orgId, om))}</td></tr>`)).join('')}</tbody></table></div>`
+    : `<p class="muted">No merchants name this partner yet. Add the partner on a merchant's form under Referral partner.</p>`;
+  h += `<div class="sec-title"><h2>Referral history</h2><span class="label">${hist.length}</span></div>`;
+  h += hist.length ? `<div class="tbl-wrap"><table><thead><tr><th>Month</th><th>Organization</th><th class="r">Merchants</th><th class="r">Org share</th><th class="r">Referral</th><th>Who pays</th><th class="r"></th></tr></thead><tbody>${hist.map(x => `<tr><td>${esc(monthShort(x.month))} ${runStatus(x.run)}</td><td>${esc(orgName(x.orgId))}</td><td class="r num">${x.merchants}</td><td class="r num">${money(x.base)}</td><td class="r num" style="font-weight:600">${money(x.amount)}</td><td>${refPill(x.mode)}</td>
+      <td class="r"><button class="btn ghost sm" data-act="ref-report" data-run="${esc(x.run.id)}" data-partner="${esc(p.id)}">${ic('file')}Report</button></td></tr>`).join('')}</tbody></table></div>`
+    : `<p class="muted">Referral amounts appear here after a residual run that includes this partner's merchants.</p>`;
+  h += partnerNeedsW9(p) ? w9Section(p) : `<div class="sec-title"><h2>W-9</h2></div><p class="muted">Not needed while every organization pays this partner directly. It's required once Payvori pays them.</p>`;
+  const led = ledgerTable(p.id); if (led) h += `<div style="margin-top:28px">${led}</div>`;
+  return h;
+}
+const refSpan = r => `${r.from && r.from !== '0000-00' ? monthShort(r.from) : 'Start'} – ${r.to ? monthShort(r.to) : 'no end date'}`;
+
+/* ---------- org tab ---------- */
+function orgPartnersTab(org) {
+  const ps = partnersOf(org.id); const om = nextOpenMonth();
+  const hist = refHistory(x => x.orgId === org.id); const lastM = hist[0]?.month;
+  let h = '';
+  if (!ps.length) return h + `<div class="empty"><h3>No referral partners</h3><p>Add a referral partner for ${esc(org.name)}, or link one that already works with another organization. Partners earn a percentage of ${esc(org.name)}'s share on the merchants they referred.</p><div style="display:flex;gap:8px;justify-content:center;margin-top:10px"><button class="btn" data-act="link-partner" data-org="${esc(org.id)}">Link existing partner</button></div></div>`;
+  h += `<div class="tbl-wrap"><table><thead><tr><th>Partner #</th><th>Partner</th><th>Who pays</th><th class="r">Merchants</th><th>W-9</th><th class="r">${lastM ? esc(monthShort(lastM)) : 'Latest month'}</th><th class="r"></th></tr></thead><tbody>`;
+  for (const p of ps) {
+    const l = partnerLinks(p).find(x => x.orgId === org.id); const pm = pendingMode(l, om); const mode = refModeFor(p, org.id, om); const lr = hist.find(x => x.month === lastM && x.partnerId === p.id);
+    h += `<tr class="click" data-act="open-partner" data-id="${esc(p.id)}" data-from="${esc(org.id)}" tabindex="0"><td class="num">${esc(p.partnerNo || '')}</td><td><div class="cell-main">${esc(p.name)}</div><div class="cell-sub">${esc([p.contactName, p.email].filter(Boolean).join(' · '))}</div></td>
+      <td>${refPill(mode)}${pm ? `<div class="cell-sub">${esc(REF_SHORT[pm.mode])} from ${esc(monthShort(pm.from))}</div>` : ''}</td><td class="r num">${merchantsReferredBy(p.id, org.id).length}</td><td>${mode === 'payvori' || partnerNeedsW9(p) ? w9Pill(p) : '<span class="muted">Not needed</span>'}</td>
+      <td class="r num">${lr ? money(lr.amount) : '—'}</td><td class="r"><button class="btn ghost sm" data-act="link-partner" data-partner="${esc(p.id)}" data-org="${esc(org.id)}">Change</button></td></tr>`;
+  }
+  h += `</tbody></table></div>`;
+  const months = [...new Set(hist.map(x => x.month))];
+  h += `<div class="sec-title"><h2>Referral reports</h2><span class="label">${months.length}</span></div>`;
+  h += months.length ? `<div class="tbl-wrap"><table><thead><tr><th>Month</th><th class="r">Partners</th><th class="r">Paid by Payvori</th><th class="r">${esc(org.name)} pays</th><th class="r"></th></tr></thead><tbody>${months.map(mo => { const xs = hist.filter(x => x.month === mo);
+    return `<tr><td>${esc(monthLabel(mo))} ${runStatus(xs[0].run)}</td><td class="r num">${new Set(xs.map(x => x.partnerId)).size}</td><td class="r num">${money(sum(xs.filter(x => x.mode === 'payvori'), x => x.amount))}</td><td class="r num" style="font-weight:600">${money(sum(xs.filter(x => x.mode !== 'payvori'), x => x.amount))}</td>
+      <td class="r"><button class="btn ghost sm" data-act="ref-report" data-run="${esc(xs[0].run.id)}" data-org="${esc(org.id)}">${ic('file')}Report</button></td></tr>`; }).join('')}</tbody></table></div>`
+    : `<p class="muted">A report appears here for each residual run that includes merchants with a referral partner.</p>`;
+  return h + `<p class="muted" style="font-size:13px;margin-top:10px">Referral partners are paid from ${esc(org.name)}'s share after its schedule is applied. When Payvori pays a partner, that amount is taken out of the agents' earnings on the merchant. When ${esc(org.name)} pays, nothing is deducted and the report shows what ${esc(org.name)} owes each partner.</p>`;
+}
+
+/* ---------- partner form ---------- */
+function partnerModal(p, preset) {
+  const isNew = !p; p = p || {kind: 'partner', status: 'Active', method: 'ACH', ...(preset || {})};
+  const org = preset?.orgId ? orgById(preset.orgId) : null;
+  const m = openModal({wide: true, title: isNew ? (org ? `Add referral partner for ${esc(org.name)}` : 'Add referral partner') : `Edit ${esc(p.name)}`, body: `
+    <div class="grid3">${fld('rp-no', 'Partner number', `<input type="text" id="rp-no" class="mono" value="${esc(p.partnerNo || 'Assigned on save')}" readonly tabindex="-1" style="background:var(--panel-2)">`)}${fld('rp-name', 'Name', tin('rp-name', p.name, 'Person or business'), 'style="grid-column:span 2"')}</div>
+    <div class="grid3">${fld('rp-contact', 'Contact name', tin('rp-contact', p.contactName))}${fld('rp-email', 'Email', tin('rp-email', p.email, '', 'email'))}${fld('rp-phone', 'Phone', tin('rp-phone', p.phone))}</div>
+    <div class="grid2">${fld('rp-addr', 'Street address', tin('rp-addr', p.address))}${fld('rp-addr2', 'Suite / unit', tin('rp-addr2', p.address2))}</div>
+    <div class="grid3">${fld('rp-city', 'City', tin('rp-city', p.city))}${fld('rp-state', 'State', tin('rp-state', p.state))}${fld('rp-zip', 'ZIP', tin('rp-zip', p.zip, '', 'text', 'mono'))}</div>
+    ${org ? `<div class="panel stack" style="gap:8px"><span class="flabel">Who pays this partner for ${esc(org.name)}</span>${modeRadios('rp-mode', 'org', org.name)}</div>` : ''}
+    <div class="grid3">${fld('rp-status', 'Status', selBox('rp-status', ['Active', 'Inactive'], p.status || 'Active'))}${fld('rp-method', 'Payment method', selBox('rp-method', METHODS, p.method || 'ACH'))}${fld('rp-ref', 'Payroll number', tin('rp-ref', p.payRef, 'If Payvori pays them'), '', 'How your payroll system knows this partner. Only needed when Payvori pays them.')}</div>
+    ${fld('rp-notes', 'Notes', `<textarea id="rp-notes">${esc(p.notes || '')}</textarea>`)}`,
+    foot: `${!isNew && !merchantsReferredBy(p.id).length && !S.runs.some(r => r.payeeTotals?.[p.id] || (r.referrals || []).some(x => x.partnerId === p.id)) ? `<button class="btn danger left" id="rp-del">${ic('trash')}Delete</button>` : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" id="rp-save">${isNew ? 'Add partner' : 'Save changes'}</button>`});
+  $('#rp-save', m).onclick = ev => {
+    const name = val(m, 'rp-name'); if (!name) { $('#rp-name', m).focus(); return toast('Enter the partner name.'); }
+    const payRef = val(m, 'rp-ref');
+    if (payRef && S.payees.some(x => x.id !== p.id && (isAgent(x) || isPartner(x)) && String(x.payRef || '').trim().toLowerCase() === payRef.toLowerCase())) { $('#rp-ref', m).focus(); return toast(`Payroll number ${payRef} is already used.`); }
+    if (!needWrite()) return;
+    const data = {kind: 'partner', name, contactName: val(m, 'rp-contact'), email: val(m, 'rp-email'), phone: val(m, 'rp-phone'), address: val(m, 'rp-addr'), address2: val(m, 'rp-addr2'), city: val(m, 'rp-city'), state: val(m, 'rp-state').toUpperCase(), zip: val(m, 'rp-zip'),
+      status: val(m, 'rp-status'), method: val(m, 'rp-method'), payRef, notes: val(m, 'rp-notes'), updatedAt: nowIso()};
+    busy(ev.currentTarget, async () => {
+      try {
+        if (isNew) {
+          const ref = S.db.collection('payees').doc();
+          const no = await claimNumber('partner', nextPartnerNo(), x => 'RP' + (+x.slice(2) + 1), ref.id);
+          const links = org ? [{orgId: org.id, modeHistory: [{from: '0000-00', mode: $('input[name=rp-mode]:checked', m)?.value || 'org', at: nowIso(), by: S.uid || null}], at: nowIso()}] : [];
+          await ref.set({...data, partnerNo: no, orgLinks: links, createdAt: nowIso(), createdBy: S.uid || null});
+          closeModal(); toast(`Referral partner ${no} added${org ? ' and linked to ' + org.name : ''}.`);
+          if (!org) go('partner', {partnerId: ref.id});
+        } else { const {id, ...rest} = p; await S.db.doc('payees/' + p.id).set({...rest, ...data}); closeModal(); toast('Referral partner saved.'); }
+      } catch (err) { toast(err?.code ? writeErr(err) : (err?.message || 'The partner could not be saved.')); }
+    });
+  };
+  const del = $('#rp-del', m); if (del) del.onclick = async () => {
+    if (!needWrite() || !await confirmModal({title: 'Delete referral partner', text: `Delete ${esc(p.name)}? It isn't on any merchant or run.`, ok: 'Delete', danger: true})) return;
+    try { await S.db.doc('payees/' + p.id).delete(); closeModal(); toast('Referral partner deleted.'); go('partners'); } catch (err) { toast(writeErr(err)); }
+  };
+}
+function nextPartnerNo() {
+  const n = Math.max(1000, ...partnerList().map(p => +String(p.partnerNo || '').replace(/\D/g, '') || 0));
+  return 'RP' + (n + 1);
+}
+const modeRadios = (name, cur, orgNm) => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:14px"><input type="radio" name="${name}" value="payvori" ${cur === 'payvori' ? 'checked' : ''}><span><b>Payvori pays the partner</b><span class="muted" style="display:block;font-size:13px">The referral is taken out of ${esc(orgNm)}'s share and paid to the partner with the residual run. Needs a W-9 and payroll number.</span></span></label>
+  <label style="display:flex;gap:8px;align-items:flex-start;font-size:14px"><input type="radio" name="${name}" value="org" ${cur !== 'payvori' ? 'checked' : ''}><span><b>${esc(orgNm)} pays the partner</b><span class="muted" style="display:block;font-size:13px">${esc(orgNm)} is paid in full. Payvori reports what ${esc(orgNm)} owes the partner each month.</span></span></label>`;
+
+/* ---------- link a partner to an organization / change who pays ---------- */
+function linkPartnerModal(partnerId, orgId) {
+  const p = partnerId ? payeeById(partnerId) : null; const om = nextOpenMonth(); const lf = latestFinalMonth();
+  const l = p && orgId ? partnerLinks(p).find(x => x.orgId === orgId) : null; const isNew = !l;
+  const cur = l ? refModeFor(p, orgId, om) : 'org';
+  const orgSel = orgId ? `<div class="cell-main">${esc(orgName(orgId))}</div>` : `<select id="lp-org">${opt('', 'Choose organization…', '')}${orgList().filter(o => !partnerLinks(p).some(x => x.orgId === o.id)).map(o => opt(o.id, o.name, '')).join('')}</select>`;
+  const partnerSel = p ? `<div class="cell-main">${esc(partnerLabel(p))}</div>` : `<select id="lp-partner">${opt('', 'Choose referral partner…', '')}${partnerList().filter(x => !partnersOf(orgId).includes(x)).map(x => opt(x.id, partnerLabel(x), '')).join('')}</select>`;
+  const used = l ? merchantsReferredBy(p.id, orgId).length : 0;
+  const m = openModal({title: isNew ? 'Link referral partner' : `${esc(p.name)} · ${esc(orgName(orgId))}`, body: `
+    <div class="grid2">${fld('lp-partner', 'Referral partner', partnerSel)}${fld('lp-org', 'Organization', orgSel)}</div>
+    <div class="panel stack" style="gap:8px"><span class="flabel">Who pays the partner</span><div id="lp-modes">${modeRadios('lp-mode', cur, orgId ? orgName(orgId) : 'The organization')}</div></div>
+    ${isNew ? '' : `<div class="field" style="max-width:260px"><label for="lp-from">Change takes effect from</label><input type="month" id="lp-from" value="${om}"></div>
+    <div class="tbl-wrap"><table><thead><tr><th>From</th><th>Who pays</th></tr></thead><tbody>${[...(l.modeHistory || [])].sort((a, b) => b.from.localeCompare(a.from)).map(x => `<tr><td>${x.from === '0000-00' ? 'Start' : esc(monthShort(x.from))}</td><td>${refPill(x.mode)}</td></tr>`).join('')}</tbody></table></div>`}
+    <div id="lp-warn"></div>`,
+    foot: `${!isNew && !used ? `<button class="btn danger left" id="lp-del">${ic('trash')}Unlink</button>` : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" id="lp-save">${isNew ? 'Link partner' : 'Save'}</button>`});
+  const oSel = $('#lp-org', m); if (oSel && oSel.tagName === 'SELECT') oSel.onchange = () => { $('#lp-modes', m).innerHTML = modeRadios('lp-mode', $('input[name=lp-mode]:checked', m)?.value || 'org', orgName(oSel.value) || 'The organization'); };
+  const fr = $('#lp-from', m); const warn = () => { if (!fr) return; $('#lp-warn', m).innerHTML = lf && fr.value && fr.value <= lf ? `<div class="note info" style="margin:0">${esc(monthLabel(lf))} is already approved. Approved months keep what was paid; the change only reaches them if you undo and rerun them.</div>` : ''; };
+  if (fr) { fr.onchange = warn; warn(); }
+  $('#lp-save', m).onclick = ev => {
+    const pid = p?.id || val(m, 'lp-partner'), oid = orgId || val(m, 'lp-org'); const mode = $('input[name=lp-mode]:checked', m)?.value || 'org';
+    if (!pid) return toast('Choose the referral partner.'); if (!oid) return toast('Choose the organization.');
+    if (!needWrite()) return;
+    const pp = payeeById(pid); const links = partnerLinks(pp).map(x => ({...x, modeHistory: [...(x.modeHistory || [])]}));
+    let next;
+    if (isNew) next = [...links, {orgId: oid, modeHistory: [{from: '0000-00', mode, at: nowIso(), by: S.uid || null}], at: nowIso()}];
+    else {
+      const from = fr.value; if (!from) return toast('Choose the month the change takes effect.');
+      if (refModeFor(pp, oid, from) === mode) { closeModal(); return toast('No change.'); }
+      next = links.map(x => x.orgId !== oid ? x : {...x, modeHistory: [...x.modeHistory.filter(h => h.from !== from), {from, mode, at: nowIso(), by: S.uid || null}].sort((a, b) => a.from.localeCompare(b.from))});
+    }
+    busy(ev.currentTarget, async () => { try { await S.db.doc('payees/' + pid).update({orgLinks: next, updatedAt: nowIso()}); closeModal(); toast(isNew ? `${pp.name} linked to ${orgName(oid)}.` : `Saved. ${REF_SHORT[mode]} from ${monthLabel(fr.value)}.`); } catch (err) { toast(writeErr(err)); } });
+  };
+  const del = $('#lp-del', m); if (del) del.onclick = async () => {
+    if (!needWrite()) return;
+    try { await S.db.doc('payees/' + p.id).update({orgLinks: partnerLinks(p).filter(x => x.orgId !== orgId), updatedAt: nowIso()}); closeModal(); toast('Unlinked.'); } catch (err) { toast(writeErr(err)); }
+  };
+}
+
+/* ---------- referral report (one run, filtered to an org or a partner) ---------- */
+async function referralReport(runId, f) {
+  const r = S.runs.find(x => x.id === runId); if (!r) return;
+  const det = await getDetail(r); if (!det) return;
+  const rows = det.lines.flatMap(l => (l.referrals || []).map(x => ({...x, merchant: l.merchant, mid: l.mid, net: l.net}))).filter(x => (!f.orgId || x.orgId === f.orgId) && (!f.partnerId || x.partnerId === f.partnerId))
+    .sort((a, b) => (payeeName(a.partnerId) || '').localeCompare(payeeName(b.partnerId) || '') || b.amount - a.amount);
+  const title = f.orgId ? `${orgName(f.orgId)} referral partners` : `${payeeName(f.partnerId)} referrals`;
+  const groups = [...new Set(rows.map(x => x.partnerId + '|' + x.orgId))].map(k => { const xs = rows.filter(x => x.partnerId + '|' + x.orgId === k); return {partnerId: xs[0].partnerId, orgId: xs[0].orgId, mode: xs[0].mode, xs}; });
+  const table = `<div class="tbl-wrap"><table><thead><tr><th>Merchant</th>${f.orgId ? '<th>Partner</th>' : '<th>Organization</th>'}<th class="r">Org share</th><th class="r">%</th><th class="r">Referral</th><th>Who pays</th></tr></thead><tbody>
+    ${groups.map(g => g.xs.map(x => `<tr><td><div class="cell-main">${esc(x.merchant)}</div><div class="cell-sub">MID ${esc(x.mid)}</div></td><td>${esc(f.orgId ? payeeName(x.partnerId) || x.name : orgName(x.orgId))}</td><td class="r num">${money(x.base)}</td><td class="r num">${pct(x.pct)}</td><td class="r num">${money(x.amount)}</td><td>${refPill(x.mode)}</td></tr>`).join('')
+      + `<tr class="subtotal"><td colspan="4"><b>${esc(payeeName(g.partnerId))}</b>${f.orgId ? '' : ' · ' + esc(orgName(g.orgId))} · ${g.xs.length} merchant${g.xs.length === 1 ? '' : 's'}</td><td class="r num"><b>${money(sum(g.xs, x => x.amount))}</b></td><td>${g.mode === 'payvori' ? 'Paid in this run' : esc(orgName(g.orgId)) + ' pays'}</td></tr>`).join('')}
+    </tbody><tfoot><tr><td colspan="4">Total</td><td class="r num">${money(sum(rows, x => x.amount))}</td><td></td></tr></tfoot></table></div>`;
+  const orgOwes = sum(rows.filter(x => x.mode !== 'payvori'), x => x.amount);
+  const m = openModal({wide: true, title: `${esc(title)} · ${esc(monthLabel(r.month))}`, body: rows.length ? `<div class="split-sum"><span>Paid by Payvori <b class="num">${money(sum(rows.filter(x => x.mode === 'payvori'), x => x.amount))}</b></span><span>Owed by the organization <b class="num">${money(orgOwes)}</b></span>${r.status === 'draft' ? '<span class="pill">Draft run</span>' : ''}</div>${table}` : `<p class="muted">No referral amounts in this run.</p>`,
+    foot: `<button class="btn" data-close>Close</button>${rows.length ? `<button class="btn" id="rr-csv">${ic('download')}CSV</button><button class="btn primary" id="rr-html">${ic('download')}Report</button>` : ''}`});
+  const fname = `referrals-${(f.orgId ? orgName(f.orgId) : payeeName(f.partnerId)).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-${r.month}`;
+  const csv = $('#rr-csv', m); if (csv) csv.onclick = () => saveFile(fname + '.csv', toCSV([['Month', 'Organization', 'Partner #', 'Partner', 'Merchant', 'MID', 'Org share', 'Referral %', 'Referral', 'Who pays'], ...rows.map(x => [r.month, orgName(x.orgId), payeeById(x.partnerId)?.partnerNo || '', payeeName(x.partnerId) || x.name, x.merchant, x.mid, moneyPlain(x.base), x.pct, moneyPlain(x.amount), REF_SHORT[x.mode]])]));
+  const hb = $('#rr-html', m); if (hb) hb.onclick = () => saveFile(fname + '.html', `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} ${esc(r.month)}</title><style>body{font-family:Helvetica,Arial,sans-serif;color:#231f1e;margin:32px;font-size:13px}h1{font-size:20px;margin:0 0 4px}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:7px 8px;border-bottom:1px solid #e4e0d8;text-align:left}.r{text-align:right}.cell-sub{color:#777;font-size:11px}.subtotal td{background:#f3f1ec}.pill{font-size:11px}tfoot td{font-weight:700;border-top:2px solid #231f1e}.muted{color:#777}</style></head><body><h1>${esc(title)}</h1><div class="muted">${esc(monthLabel(r.month))}${r.status === 'draft' ? ' · draft' : ''} · Paid by Payvori ${money(sum(rows.filter(x => x.mode === 'payvori'), x => x.amount))} · Owed by the organization ${money(orgOwes)}</div>${table.replace(/<span class="pill[^"]*">([^<]*)<\/span>/g, '$1')}</body></html>`);
+}
+
+/* ---------- merchant form section ---------- */
+function referralEditor(m, d, getOrg, getExample) {
+  let refs = (d.referrals || []).map(x => ({...x}));
+  const box = $('#d-refs', m);
+  const draw = () => {
+    const orgId = getOrg(); const ps = partnersOf(orgId); const om = nextOpenMonth();
+    const opts = cur => opt('', ps.length ? 'Choose partner…' : orgId ? 'No partners linked to this organization' : 'Choose an organization first', cur || '') + ps.map(p => opt(p.id, partnerLabel(p) + ' · ' + REF_SHORT[refModeFor(p, orgId, om)], cur)).join('') + (cur && !ps.some(p => p.id === cur) ? opt(cur, (payeeName(cur) || 'Partner') + ' (not linked to this organization)', cur) : '');
+    const ex = getExample();
+    box.innerHTML = `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span class="flabel">Referral partner</span><span class="hint muted" style="font-size:12.5px">Percent of ${esc(orgName(orgId) || 'the organization')}'s share on this merchant, after its schedule is applied.</span></div>
+      ${refs.map((x, i) => { const p = payeeById(x.partnerId); const mode = p ? refModeFor(p, orgId, om) : '';
+        return `<div class="split-row ref-row" data-i="${i}"><select aria-label="Referral partner ${i + 1}" data-f="partner" id="d-rp-${i}">${opts(x.partnerId)}</select>
+        <div class="pct-in"><input type="number" min="0" max="100" step="0.01" aria-label="Percent of organization share" data-f="pct" id="d-rpp-${i}" value="${esc(x.pct ?? '')}"></div>
+        <span class="inline-field" style="margin:0"><label for="d-rpf-${i}">From</label><input type="month" id="d-rpf-${i}" data-f="from" value="${esc(x.from && x.from !== '0000-00' ? x.from : '')}"></span>
+        <span class="inline-field" style="margin:0"><label for="d-rpt-${i}">To</label><input type="month" id="d-rpt-${i}" data-f="to" value="${esc(x.to || '')}"></span>
+        <button class="icon-btn" data-f="rm" aria-label="Remove referral partner ${i + 1}">${ic('x')}</button>
+        <div class="cell-sub" style="flex-basis:100%">${p && +x.pct > 0 ? `${mode === 'payvori' ? 'Payvori pays it, taken out of the agents’ earnings on this merchant' : esc(orgName(orgId)) + ' pays it; Payvori reports it'}${ex ? ` · on an org share of ${money(ex)}: ${money(Math.round(ex * x.pct / 100))}` : ''}` : ''}</div></div>`; }).join('')}
+      <div><button class="btn sm" id="d-rp-add" ${orgId && ps.length ? '' : 'disabled'}>${ic('plus')}Add referral partner</button>${orgId && !ps.length ? ` <span class="muted" style="font-size:13px">Link a partner on ${esc(orgName(orgId))}'s Referral partners tab first.</span>` : ''}</div>`;
+    $('#d-rp-add', box).onclick = () => { refs.push({id: 'rf' + Math.random().toString(36).slice(2, 9), partnerId: '', pct: '', from: '', to: ''}); draw(); };
+  };
+  box.addEventListener('input', e => { const row = e.target.closest('.ref-row'); if (!row) return; const x = refs[+row.dataset.i]; const f = e.target.dataset.f; if (f === 'pct') x.pct = e.target.value === '' ? '' : +e.target.value; else if (f === 'from' || f === 'to') x[f] = e.target.value; });
+  box.addEventListener('change', e => { const row = e.target.closest('.ref-row'); if (!row) return; const x = refs[+row.dataset.i]; const f = e.target.dataset.f; if (f === 'partner') x.partnerId = e.target.value; if (f === 'pct' || f === 'partner') draw(); });
+  box.addEventListener('click', e => { const b = e.target.closest('[data-f="rm"]'); if (!b || !b.closest('.ref-row')) return; refs.splice(+b.closest('.ref-row').dataset.i, 1); draw(); });
+  draw();
+  return {
+    redraw: draw,
+    value() {
+      const out = refs.filter(x => x.partnerId || x.pct).map(x => ({id: x.id || 'rf' + Math.random().toString(36).slice(2, 9), partnerId: x.partnerId, pct: +x.pct || 0, from: x.from || '0000-00', to: x.to || ''}));
+      if (out.some(x => !x.partnerId)) return {err: 'Choose the referral partner, or remove the empty row.'};
+      if (out.some(x => !(x.pct > 0 && x.pct <= 100))) return {err: 'Enter a referral percentage between 0 and 100.'};
+      if (out.some(x => x.to && x.from !== '0000-00' && x.to < x.from)) return {err: 'A referral end month is before its start month.'};
+      if (sum(out, x => x.pct) > 100) return {err: 'Referral partners add up to more than 100% of the organization share.'};
+      return {list: out};
+    },
+  };
+}
+
+Object.assign(actions, {
+  'new-partner': d => partnerModal(null, d?.org ? {orgId: d.org} : null),
+  'open-partner': d => go('partner', {partnerId: d.id, partnerFrom: d.from || ''}),
+  'link-partner': d => { if (!partnersOf(d.org || '').length && d.org && !d.partner && !partnerList().length) return partnerModal(null, {orgId: d.org}); linkPartnerModal(d.partner || '', d.org || ''); },
+  'ref-report': d => referralReport(d.run, {orgId: d.org || '', partnerId: d.partner || ''}),
+});
+document.addEventListener('input', e => { if (e.target.id === 'partner-q') { S.partnerQ = e.target.value; render(); } });
 
 /* ---------- Order Entry ---------- */
 const orderMerchant = o => o.customerId ? custName(o.customerId) || 'Removed customer' : o.app?.dba || 'New merchant';
@@ -2537,13 +2841,14 @@ function setOrgSort(key, dir) { S.orgSort = {key, dir}; try { localStorage.setIt
 function viewOrg() {
   const p = payeeById(S.orgId);
   if (!p) return `<button class="back" data-nav="orgs">${ic('back')}All organizations</button><div class="empty"><p>${ready('payees') ? 'This organization no longer exists.' : 'Loading organization…'}</p></div>`;
-  const tabs = [['overview', 'Overview'], ['agents', 'Agents'], ...(allowed('pricing') ? [['pricing', 'Pricing']] : []), ['customers', 'Merchants']];
+  const tabs = [['overview', 'Overview'], ['agents', 'Agents'], ...(allowed('pricing') ? [['pricing', 'Pricing']] : []), ['customers', 'Merchants'], ['partners', 'Referral partners']];
   if (!tabs.some(([k]) => k === S.orgTab)) S.orgTab = 'overview';
   const sc = S.schedules.filter(x => x.kind === 'agent' && x.payeeId === p.id).sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
   const custs = S.merchants.filter(c => c.orgId === p.id);
   const agents = agentsOf(p.id);
   const primary = S.orgTab === 'agents' ? `<button class="btn primary" data-act="new-agent" data-org="${esc(p.id)}">${ic('plus')}Add agent</button>` : S.orgTab === 'pricing' ? `<button class="btn primary" data-act="new-org-sched" data-id="${esc(p.id)}">${ic('plus')}New Schedule A</button>`
-    : S.orgTab === 'customers' ? `<button class="btn primary" data-act="new-merchant" data-org="${esc(p.id)}">${ic('plus')}Add merchant</button>` : '';
+    : S.orgTab === 'customers' ? `<button class="btn primary" data-act="new-merchant" data-org="${esc(p.id)}">${ic('plus')}Add merchant</button>`
+    : S.orgTab === 'partners' ? `<button class="btn" data-act="link-partner" data-org="${esc(p.id)}">Link existing partner</button><button class="btn primary" data-act="new-partner" data-org="${esc(p.id)}">${ic('plus')}Add referral partner</button>` : '';
   let h = `<button class="back" data-nav="orgs">${ic('back')}All organizations</button>
     <div class="page-head"><div><div class="eyebrow">${esc(p.role || 'Organization')}</div><h1>${esc(p.name)}</h1>
     <div class="meta"><span>${stPill(p.status || 'Active')}</span>${p.agentNo ? `<span>ORG # ${esc(p.agentNo)}</span>` : ''}</div></div>
@@ -2551,7 +2856,7 @@ function viewOrg() {
   if (!payeeById(p.primaryAgentId)) h += `<div class="note">${esc(p.name)} needs a primary agent.${p.payRef ? ` Its payroll number ${esc(p.payRef)} moves to the new agent.` : ''}<button class="btn sm" data-act="make-primary" data-id="${esc(p.id)}">${ic('plus')}Create primary agent from organization details</button></div>`;
   const po = payoutFor(p, nextOpenMonth()); const pending = (p.payoutHistory || []).find(x => x.from > (latestFinalMonth() || '') && x.from > nextOpenMonth());
   if (pending) h += `<div class="note info">From ${esc(monthLabel(pending.from))}: ${esc(PAYOUT[pending.mode])}${pending.mode === 'primary' ? ' (' + esc(payeeName(pending.primaryAgentId)) + ')' : ''}.</div>`;
-  const count = {agents: agents.length, pricing: sc.length, customers: custs.length};
+  const count = {agents: agents.length, pricing: sc.length, customers: custs.length, partners: partnersOf(p.id).length};
   h += `<div class="subtabs" role="tablist">${tabs.map(([k, l]) => `<button class="subtab" role="tab" aria-selected="${S.orgTab === k}" data-act="org-tab" data-tab="${k}">${l}${k in count ? `<span class="count">${count[k]}</span>` : ''}</button>`).join('')}</div>`;
   if (S.orgTab === 'pricing') {
     if (!ready('schedules', 'processors')) return h + `<div class="empty"><p>Loading pricing…</p></div>`;
@@ -2564,6 +2869,7 @@ function viewOrg() {
     if (!agents.length) return h + `<div class="empty"><h3>No agents yet</h3><p>Add the agents in ${esc(p.name)}, each with a unique agent number and their own payroll number. Deal splits pay agents, and their earnings roll up here.</p></div>`;
     return h + agentTable(agents);
   }
+  if (S.orgTab === 'partners') return h + orgPartnersTab(p);
   if (S.orgTab === 'customers') {
     if (!custs.length) return h + `<div class="empty"><p>No merchants in the CID are sold through ${esc(p.name)} yet.</p></div>`;
     return h + merchantTable(custs);
@@ -2578,7 +2884,7 @@ function viewOrg() {
     <div class="tile"><span class="label">Latest run</span><span class="v">${st.last ? money(st.last.amount) : '—'}</span><span class="s">${st.last ? esc(monthLabel(st.last.month)) : 'No runs yet'}</span></div>
     <div class="tile ${st.balance ? 'neg' : ''}"><span class="label">Balance</span><span class="v">${money(st.balance)}</span><span class="s">Across its agents</span></div>
     <div class="tile"><span class="label">Paid to date</span><span class="v">${money(st.paid)}</span><span class="s">All agents, all runs</span></div></div>`;
-  h += `<div class="kv">${kv('Primary agent', payeeById(p.primaryAgentId) ? `<a href="#" data-act="open-agent" data-id="${esc(p.primaryAgentId)}">#${esc(payeeById(p.primaryAgentId).agentNo || '')} · ${esc(payeeName(p.primaryAgentId))}</a>` : '')}${kv('Who Payvori pays', esc(PAYOUT[po.mode]))}${kv('Agreement signed', esc(p.agreementDate || ''))}${kv('Main contact', esc(p.contactName || ''))}${kv('Payvori email', p.payvoriEmail ? `<a href="mailto:${esc(p.payvoriEmail)}">${esc(p.payvoriEmail)}</a>` : '')}${kv('Statement email', esc(p.email || ''))}${kv('Phone', esc(p.phone || ''))}${kv('Address', [[p.address, p.address2].filter(Boolean).join(', '), [[p.city, p.state].filter(Boolean).join(', '), p.zip].filter(Boolean).join(' ')].filter(Boolean).map(esc).join('<br>'))}</div>`;
+  h += `<div class="kv">${kv('Primary agent', payeeById(p.primaryAgentId) ? `<a href="#" data-act="open-agent" data-id="${esc(p.primaryAgentId)}">#${esc(payeeById(p.primaryAgentId).agentNo || '')} · ${esc(payeeName(p.primaryAgentId))}</a>` : '')}${kv('Who Payvori pays', esc(PAYOUT[po.mode]))}${kv('Agreement signed', esc(p.agreementDate || ''))}${kv('Contact name', esc(p.contactName || ''))}${kv('Payvori email', p.payvoriEmail ? `<a href="mailto:${esc(p.payvoriEmail)}">${esc(p.payvoriEmail)}</a>` : '')}${kv('Statement email', esc(p.email || ''))}${kv('Phone', esc(p.phone || ''))}${kv('Address', [[p.address, p.address2].filter(Boolean).join(', '), [[p.city, p.state].filter(Boolean).join(', '), p.zip].filter(Boolean).join(' ')].filter(Boolean).map(esc).join('<br>'))}</div>`;
   if (p.notes) h += `<div class="note info" style="margin-top:12px">${esc(p.notes)}</div>`;
   h += overrideSection(p);
   const led = ledgerTable(p.id);
@@ -2702,7 +3008,7 @@ function merchantStatementBody(r, st, line) {
     ${d.agentSplitPercent != null ? `<tr><td>Payvori split · ${esc(pct(d.agentSplitPercent))}</td><td class="r num">${usd(d.agentNetSplit)}</td></tr>` : ''}
     ${d.subAgentNetSplit ? `<tr><td>Less sub-agent split paid by the processor${d.subAgentSplitPercent != null ? ' · ' + esc(pct(d.subAgentSplitPercent)) : ''}</td><td class="r num">${usd(-d.subAgentNetSplit)}</td></tr>` : ''}`;
   h += `<tr><td><b>Residual to Payvori</b></td><td class="r num"><b>${money(st.net)}</b></td></tr>`;
-  if (line) { for (const x of line.splits) h += `<tr><td>${x.kind === 'override' ? `Override to ${esc(payeeName(x.payeeId) || x.name)}` + (x.paidTo && x.paidTo !== x.payeeId ? `, paid through primary agent ${esc(payeeName(x.paidTo))}` : '') : x.paidTo && x.paidTo !== x.payeeId ? `Earned by ${esc(payeeName(x.payeeId) || x.name)}, paid through primary agent ${esc(payeeName(x.paidTo))}` : `Paid to ${esc(payeeName(x.payeeId) || x.name)}`} · ${esc(pct(x.pct))}</td><td class="r num">${money(-x.amount)}</td></tr>`; }
+  if (line) { for (const x of line.splits) h += `<tr><td>${x.kind === 'referral' ? `Referral to ${esc(payeeName(x.payeeId) || x.name)} · ${esc(pct(x.refPct))} of ${esc(orgName(x.onOrg))}'s share` : x.kind === 'override' ? `Override to ${esc(payeeName(x.payeeId) || x.name)}` + (x.paidTo && x.paidTo !== x.payeeId ? `, paid through primary agent ${esc(payeeName(x.paidTo))}` : '') : x.paidTo && x.paidTo !== x.payeeId ? `Earned by ${esc(payeeName(x.payeeId) || x.name)}, paid through primary agent ${esc(payeeName(x.paidTo))}` : `Paid to ${esc(payeeName(x.payeeId) || x.name)}`} ${x.kind === 'referral' ? '' : ' · ' + esc(pct(x.pct))}${x.refs?.length ? ' (after referral)' : ''}</td><td class="r num">${money(-x.amount)}</td></tr>`; for (const x of (line.referrals || []).filter(y => y.mode !== 'payvori')) h += `<tr><td class="muted">Referral to ${esc(payeeName(x.partnerId) || x.name)} · ${esc(pct(x.pct))} of ${esc(orgName(x.orgId))}'s share, paid by ${esc(orgName(x.orgId))}</td><td class="r num muted">${money(x.amount)}</td></tr>`; }
   h += `</tbody></table>`;
   h += `<div class="stmt-total"><span class="muted">${line ? (line.splits.length ? 'After agent payouts and overrides on this deal' : 'No agent splits on this deal') : 'No deal in the CID for this MID, so nothing is paid out'}</span><span><span class="label">Payvori keeps</span> <span class="v num">${money(line ? line.house : st.net)}</span></span></div>`;
   if (sub.length) h += `<p class="muted" style="font-size:12.5px;margin-top:10px">Sub-agent costs on the processor report: ${sub.map(([l, v]) => esc(l) + ' ' + usd(v)).join(' · ')}</p>`;
@@ -2837,7 +3143,7 @@ function nextAgentNo(orgNo, exceptId, orgId) {
   return pre + String(n + 1).padStart(3, '0');
 }
 const bumpAgentNoFor = pre => c => pre + String(agentSeq(c, pre) + 1).padStart(3, '0');
-const numberInUse = (kind, no, ownerId) => S.payees.some(x => x.id !== ownerId && (kind === 'agent' ? isAgent(x) : !isAgent(x)) && String(x.agentNo || '').trim().toLowerCase() === String(no).toLowerCase());
+const numberInUse = (kind, no, ownerId) => S.payees.some(x => x.id !== ownerId && (kind === 'partner' ? isPartner(x) && String(x.partnerNo || '').toLowerCase() === String(no).toLowerCase() : (kind === 'agent' ? isAgent(x) : isOrg(x)) && String(x.agentNo || '').trim().toLowerCase() === String(no).toLowerCase()));
 // Claim a number with a short lease on numbers/<kind>-<no>, so two people saving at once never get the same one.
 // A claimed number stays claimed even if its record is deleted, so numbers are never reissued.
 async function claimNumber(kind, first, next, ownerId) {
@@ -2867,7 +3173,7 @@ async function assignAgentNo(orgId, agentId) {
   const pre = await ensureOrgNo(org);
   return claimNumber('agent', nextAgentNo(pre, agentId, orgId), bumpAgentNoFor(pre), agentId);
 }
-/* ---------- overrides: a referring organization's agent earns a % of the whole deal on a referred organization ---------- */
+/* ---------- overrides: a referring organization's agent earns a % of the referred organization's schedule profit (same base the referred org's split uses), paid from Payvori's share ---------- */
 const activeOverrides = (orgId, month) => orgId ? (orgById(orgId)?.overrides || []).filter(o => o.agentId && +o.pct > 0 && (o.from || '0000-00') <= month && (!o.to || month <= o.to)) : [];
 function dealOrgId(d) {
   if (d.orgId) return d.orgId;
@@ -2927,7 +3233,7 @@ function agentModal(a, preset) {
     if (isPrimary(a) && orgId !== a.orgId) { $('#a-org', m).focus(); return toast(`${a.name} is the primary agent. Make another agent primary before moving them.`); }
     if (isPrimary(a) && val(m, 'a-status') !== 'Active') { $('#a-status', m).focus(); return toast(`${a.name} is the primary agent and must stay Active. Make another agent primary first.`); }
     const payRef = val(m, 'a-ref');
-    const dupPay = payRef && S.payees.find(x => isAgent(x) && x.id !== a.id && String(x.payRef || '').trim().toLowerCase() === payRef.toLowerCase());
+    const dupPay = payRef && S.payees.find(x => (isAgent(x) || isPartner(x)) && x.id !== a.id && String(x.payRef || '').trim().toLowerCase() === payRef.toLowerCase());
     if (dupPay) { $('#a-ref', m).focus(); return toast(`Payroll number ${payRef} is already used by ${dupPay.name}.`); }
     const pv = val(m, 'a-pvemail').toLowerCase();
     if (pv && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(pv)) { $('#a-pvemail', m).focus(); return toast('Enter a valid Payvori email.'); }
@@ -3014,11 +3320,13 @@ Object.assign(actions, {
    ====================================================================== */
 const W9_CLASS = {individual: 'Individual/sole proprietor', ccorp: 'C corporation', scorp: 'S corporation', partnership: 'Partnership', trust: 'Trust/estate', llc: 'LLC', other: 'Other'};
 const W9_LLC = {C: 'C corporation', S: 'S corporation', P: 'Partnership'};
+const W9_REQ = [['signedDate', 'w-signed', 'Date signed'], ['name', 'w-name', 'Line 1 name'], ['classification', 'w-class', 'Line 3a tax classification'], ['llcClass', 'w-llc', 'LLC tax classification', w => w.classification === 'llc'], ['otherText', 'w-other', 'Other classification description', w => w.classification === 'other'],
+  ['address', 'w-addr', 'Line 5 address'], ['city', 'w-city', 'City'], ['state', 'w-state', 'State'], ['zip', 'w-zip', 'ZIP'], ['tinType', 'w-tintype', 'TIN type'], ['tinLast4', 'w-last4', 'TIN last 4']];
+const w9Missing = w => W9_REQ.filter(([k, , , when]) => (!when || when(w)) && !w?.[k]).map(([k, id, label]) => ({k, id, label}));
 function w9Status(a) {
   const w = a?.w9;
   if (!w || !w.received) return {k: 'missing', label: 'W-9 missing', pill: 'neg'};
-  const need = [w.name, w.classification, w.address, w.city, w.state, w.zip, w.tinType, w.tinLast4, w.signedDate];
-  if (need.some(x => !x) || (w.classification === 'llc' && !w.llcClass) || (w.classification === 'other' && !w.otherText)) return {k: 'incomplete', label: 'W-9 incomplete', pill: 'warn'};
+  if (w9Missing(w).length) return {k: 'incomplete', label: 'W-9 incomplete', pill: 'warn'};
   if (w.backup) return {k: 'backup', label: 'Backup withholding', pill: 'warn'};
   return {k: 'ok', label: 'W-9 on file', pill: 'paid'};
 }
@@ -3030,7 +3338,7 @@ function w9Section(a) {
   const kv = (l, v) => `<div><span class="label">${l}</span>${v || '<span class="muted">—</span>'}</div>`;
   let h = `<div class="sec-title"><h2>W-9</h2>${w9Pill(a)}${w.tinCheck === 'matched' ? '<span class="pill paid">TIN matched</span>' : w.tinCheck === 'mismatch' ? '<span class="pill neg">TIN mismatch</span>' : ''}<button class="btn sm" data-act="edit-w9" data-id="${esc(a.id)}">${ic('file')}${w.received ? 'Edit W-9' : 'Record W-9'}</button></div>`;
   if (st.k === 'missing') return h + `<div class="note">No W-9 on file for ${esc(a.name)}. Collect a signed W-9 (Rev. March 2024) before paying them, then record it here.</div>`;
-  if (st.k === 'incomplete') h += `<div class="note">Some required W-9 details are missing. Open the W-9 to finish it.</div>`;
+  if (st.k === 'incomplete') h += `<div class="note">Still needed for a complete W-9: ${w9Missing(w).map(x => esc(x.label)).join(', ')}. Open the W-9 to finish it.</div>`;
   if (w.backup) h += `<div class="note">Backup withholding applies to this payee. Talk to your tax advisor about withholding on their payments.</div>`;
   return h + `<div class="kv">${kv('Line 1 · Name', esc(w.name || ''))}${kv('Line 2 · Business name', esc(w.businessName || ''))}${kv('Line 3a · Tax classification', esc(w9ClassLabel(w)))}${w.foreignPartners ? kv('Line 3b', 'Has foreign partners, owners or beneficiaries') : ''}
     ${kv('Line 4 · Exemptions', esc([w.exemptPayee && 'Payee code ' + w.exemptPayee, w.fatca && 'FATCA ' + w.fatca].filter(Boolean).join(' · ')))}${kv('Lines 5–6 · Address', [w.address, [[w.city, w.state].filter(Boolean).join(', '), w.zip].filter(Boolean).join(' ')].filter(Boolean).map(esc).join('<br>'))}
@@ -3040,22 +3348,26 @@ function w9Modal(a) {
   const w = {revision: 'Rev. March 2024', name: a.name, tinType: 'SSN', ...(a.w9 || {})};
   const radio = (name, v, label, cur) => `<label style="display:inline-flex;gap:6px;align-items:center;font-size:14px;margin-right:14px"><input type="radio" name="${name}" value="${v}" ${cur === v ? 'checked' : ''}>${label}</label>`;
   const m = openModal({wide: true, title: `W-9 · ${esc(a.name)}`, body: `
-    <div class="grid3">${fld('w-rec', 'Received', tin('w-rec', w.received || todayIso(), '', 'date'))}${fld('w-rev', 'Form revision', selBox('w-rev', ['Rev. March 2024', 'Rev. October 2018', 'Other'], w.revision))}${fld('w-signed', 'Part II · Date signed', tin('w-signed', w.signedDate, '', 'date'), '', 'Only record a W-9 that is signed and dated.')}</div>
-    <div class="grid2">${fld('w-name', 'Line 1 · Name of entity/individual', tin('w-name', w.name, 'Required'), '', 'For a sole proprietor or disregarded entity, the owner’s name.')}${fld('w-biz', 'Line 2 · Business name / disregarded entity', tin('w-biz', w.businessName, 'If different from line 1'))}</div>
-    <div class="field"><span class="flabel">Line 3a · Federal tax classification</span><div>${Object.entries(W9_CLASS).map(([k, l]) => radio('w-class', k, l, w.classification)).join('')}</div></div>
-    <div class="grid3">${fld('w-llc', 'LLC tax classification', `<select id="w-llc">${opt('', 'Choose…', w.llcClass || '')}${Object.entries(W9_LLC).map(([k, l]) => opt(k, `${k} · ${l}`, w.llcClass)).join('')}</select>`)}${fld('w-other', 'Other (describe)', tin('w-other', w.otherText))}<div class="field"><span class="flabel">Line 3b</span><label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="w-3b" ${w.foreignPartners ? 'checked' : ''}> Has foreign partners, owners or beneficiaries</label></div></div>
+    <p class="muted" style="font-size:13px"><span class="req">*</span> Needed for the W-9 to count as complete. You can save without them; the W-9 shows as incomplete until they are filled in.</p>
+    <div id="w-missing"></div>
+    <div class="grid3">${fld('w-rec', 'Received', tin('w-rec', w.received || todayIso(), '', 'date'))}${fld('w-rev', 'Form revision', selBox('w-rev', ['Rev. March 2024', 'Rev. October 2018', 'Other'], w.revision))}${fld('w-signed', 'Part II · Date signed<span class="req" aria-hidden="true">*</span>', tin('w-signed', w.signedDate, '', 'date'), '', 'Only record a W-9 that is signed and dated.')}</div>
+    <div class="grid2">${fld('w-name', 'Line 1 · Name of entity/individual<span class="req" aria-hidden="true">*</span>', tin('w-name', w.name, 'Required'), '', 'For a sole proprietor or disregarded entity, the owner’s name.')}${fld('w-biz', 'Line 2 · Business name / disregarded entity', tin('w-biz', w.businessName, 'If different from line 1'))}</div>
+    <div class="field"><span class="flabel">Line 3a · Federal tax classification<span class="req" aria-hidden="true">*</span></span><div id="w-class" tabindex="-1">${Object.entries(W9_CLASS).map(([k, l]) => radio('w-class', k, l, w.classification)).join('')}</div></div>
+    <div class="grid3">${fld('w-llc', 'LLC tax classification<span class="req" id="w-llc-req" aria-hidden="true" hidden>*</span>', `<select id="w-llc">${opt('', 'Choose…', w.llcClass || '')}${Object.entries(W9_LLC).map(([k, l]) => opt(k, `${k} · ${l}`, w.llcClass)).join('')}</select>`)}${fld('w-other', 'Other (describe)<span class="req" id="w-other-req" aria-hidden="true" hidden>*</span>', tin('w-other', w.otherText))}<div class="field"><span class="flabel">Line 3b</span><label style="display:flex;gap:8px;align-items:center;font-size:13.5px"><input type="checkbox" id="w-3b" ${w.foreignPartners ? 'checked' : ''}> Has foreign partners, owners or beneficiaries</label></div></div>
     <div class="grid2">${fld('w-exempt', 'Line 4 · Exempt payee code', tin('w-exempt', w.exemptPayee, 'If any'))}${fld('w-fatca', 'Line 4 · FATCA exemption code', tin('w-fatca', w.fatca, 'If any'))}</div>
-    ${fld('w-addr', 'Line 5 · Address (number, street, apt or suite)', tin('w-addr', w.address))}
-    <div class="grid3">${fld('w-city', 'Line 6 · City', tin('w-city', w.city))}${fld('w-state', 'State', tin('w-state', w.state, 'FL'))}${fld('w-zip', 'ZIP', tin('w-zip', w.zip, '', 'text', 'mono'))}</div>
+    ${fld('w-addr', 'Line 5 · Address (number, street, apt or suite)<span class="req" aria-hidden="true">*</span>', tin('w-addr', w.address))}
+    <div class="grid3">${fld('w-city', 'Line 6 · City<span class="req" aria-hidden="true">*</span>', tin('w-city', w.city))}${fld('w-state', 'State<span class="req" aria-hidden="true">*</span>', tin('w-state', w.state, 'FL'))}${fld('w-zip', 'ZIP<span class="req" aria-hidden="true">*</span>', tin('w-zip', w.zip, '', 'text', 'mono'))}</div>
     ${fld('w-acct', 'Line 7 · Account numbers (optional)', tin('w-acct', w.accounts))}
-    <div class="panel stack" style="gap:10px"><span class="flabel">Part I · Taxpayer identification number</span>
-      <div>${radio('w-tintype', 'SSN', 'Social security number', w.tinType)}${radio('w-tintype', 'EIN', 'Employer identification number', w.tinType)}</div>
-      <div class="grid3">${fld('w-last4', 'Last 4 digits', tin('w-last4', w.tinLast4, '1234', 'text', 'mono'), '', 'Only the last 4 digits are kept in the Engine. Keep the full number in your payroll or tax filing system.')}${fld('w-check', 'IRS TIN check', `<select id="w-check">${opt('', 'Not checked', w.tinCheck || '')}${opt('matched', 'Matched', w.tinCheck)}${opt('mismatch', 'Mismatch', w.tinCheck)}</select>`)}${fld('w-checkd', 'Checked on', tin('w-checkd', w.tinCheckDate, '', 'date'))}</div></div>
+    <div class="panel stack" style="gap:10px"><span class="flabel">Part I · Taxpayer identification number<span class="req" aria-hidden="true">*</span></span>
+      <div id="w-tintype" tabindex="-1">${radio('w-tintype', 'SSN', 'Social security number', w.tinType)}${radio('w-tintype', 'EIN', 'Employer identification number', w.tinType)}</div>
+      <div class="grid3">${fld('w-last4', 'Last 4 digits<span class="req" aria-hidden="true">*</span>', tin('w-last4', w.tinLast4, '1234', 'text', 'mono'), '', 'Only the last 4 digits are kept in the Engine. Keep the full number in your payroll or tax filing system.')}${fld('w-check', 'IRS TIN check', `<select id="w-check">${opt('', 'Not checked', w.tinCheck || '')}${opt('matched', 'Matched', w.tinCheck)}${opt('mismatch', 'Mismatch', w.tinCheck)}</select>`)}${fld('w-checkd', 'Checked on', tin('w-checkd', w.tinCheckDate, '', 'date'))}</div></div>
     <label style="display:flex;gap:8px;align-items:center;font-size:14px"><input type="checkbox" id="w-backup" ${w.backup ? 'checked' : ''}> Subject to backup withholding (item 2 of the certification was crossed out, or the IRS notified you)</label>
     <div class="grid2">${fld('w-loc', 'Signed copy kept at', tin('w-loc', w.location, 'e.g. Payroll system, Drive › Tax › W-9s'))}${fld('w-notes', 'Notes', tin('w-notes', w.notes))}</div>`,
     foot: `${a.w9?.received ? `<button class="btn danger left" id="w-clear">${ic('trash')}Remove W-9</button>` : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" id="w-save">Save W-9</button>`});
-  const sync = () => { const c = $('input[name=w-class]:checked', m)?.value || ''; $('#w-llc', m).disabled = c !== 'llc'; $('#w-other', m).disabled = c !== 'other'; $('#w-3b', m).disabled = !(c === 'partnership' || c === 'trust' || (c === 'llc' && $('#w-llc', m).value === 'P')); };
+  const sync = () => { const c = $('input[name=w-class]:checked', m)?.value || ''; $('#w-llc', m).disabled = c !== 'llc'; $('#w-other', m).disabled = c !== 'other'; $('#w-llc-req', m).hidden = c !== 'llc'; $('#w-other-req', m).hidden = c !== 'other'; if (c !== 'llc') $('#w-llc', m).closest('.field').classList.remove('need'); if (c !== 'other') $('#w-other', m).closest('.field').classList.remove('need'); $('#w-3b', m).disabled = !(c === 'partnership' || c === 'trust' || (c === 'llc' && $('#w-llc', m).value === 'P')); };
   m.addEventListener('change', sync); sync();
+  const unmark = e => { const f = e.target.closest('.need'); if (f && (e.target.type === 'radio' || e.target.value)) f.classList.remove('need'); const b = $('#w-save', m); if (b.dataset.confirm && !$('.need', m)) { $('#w-missing', m).innerHTML = ''; delete b.dataset.confirm; b.textContent = 'Save W-9'; } };
+  m.addEventListener('input', unmark); m.addEventListener('change', unmark);
   $('#w-save', m).onclick = ev => {
     const last4 = val(m, 'w-last4').replace(/[\s-]/g, '');
     if (last4 && !/^\d{4}$/.test(last4)) { $('#w-last4', m).focus(); return toast(last4.length > 4 ? 'Enter only the last 4 digits. The full number is not stored here.' : 'Enter the last 4 digits of the SSN or EIN.'); }
@@ -3065,7 +3377,17 @@ function w9Modal(a) {
     const data = {received: val(m, 'w-rec'), revision: val(m, 'w-rev'), signedDate: val(m, 'w-signed'), name: val(m, 'w-name'), businessName: val(m, 'w-biz'), classification: c, llcClass: c === 'llc' ? val(m, 'w-llc') : '', otherText: c === 'other' ? val(m, 'w-other') : '',
       foreignPartners: !$('#w-3b', m).disabled && $('#w-3b', m).checked, exemptPayee: val(m, 'w-exempt'), fatca: val(m, 'w-fatca'), address: val(m, 'w-addr'), city: val(m, 'w-city'), state: val(m, 'w-state').toUpperCase(), zip: val(m, 'w-zip'), accounts: val(m, 'w-acct'),
       tinType: $('input[name=w-tintype]:checked', m)?.value || '', tinLast4: last4, tinCheck: val(m, 'w-check'), tinCheckDate: val(m, 'w-checkd'), backup: $('#w-backup', m).checked, location: val(m, 'w-loc'), notes: val(m, 'w-notes'), updatedAt: nowIso(), updatedBy: S.uid || null};
-    busy(ev.currentTarget, async () => { try { await S.db.doc('payees/' + a.id).set({...Object.fromEntries(Object.entries(a).filter(([k]) => k !== 'id')), w9: data, updatedAt: nowIso()}); closeModal(); const st = w9Status({w9: data}); toast(st.k === 'ok' ? 'W-9 saved and complete.' : st.k === 'backup' ? 'W-9 saved. Backup withholding applies.' : 'W-9 saved but incomplete. Fill in the missing details.'); } catch (err) { toast(writeErr(err)); } });
+    $$('.need', m).forEach(e => e.classList.remove('need'));
+    const miss = w9Missing(data), btn = ev.currentTarget;
+    if (miss.length && !btn.dataset.confirm) {
+      miss.forEach(x => { const el = $('#' + x.id, m); (el?.closest('.field') || el?.parentElement)?.classList.add('need'); });
+      $('#w-missing', m).innerHTML = `<div class="note neg-note" role="alert"><div><b>${miss.length} field${miss.length === 1 ? '' : 's'} still needed for a complete W-9:</b> ${miss.map(x => `<a href="#" data-goto="${x.id}">${esc(x.label)}</a>`).join(', ')}. Fill ${miss.length === 1 ? 'it' : 'them'} in, or select <b>Save as incomplete</b>.</div></div>`;
+      $$('[data-goto]', m).forEach(l => l.onclick = e2 => { e2.preventDefault(); const t = $('#' + l.dataset.goto, m); t.scrollIntoView({block: 'center'}); (t.matches('input,select') ? t : t.querySelector('input') || t).focus(); });
+      $('#w-missing', m).scrollIntoView({block: 'center'});
+      btn.dataset.confirm = '1'; btn.textContent = 'Save as incomplete';
+      return;
+    }
+    busy(btn, async () => { try { await S.db.doc('payees/' + a.id).set({...Object.fromEntries(Object.entries(a).filter(([k]) => k !== 'id')), w9: data, updatedAt: nowIso()}); closeModal(); const st = w9Status({w9: data}); toast(st.k === 'ok' ? 'W-9 saved and complete.' : st.k === 'backup' ? 'W-9 saved. Backup withholding applies.' : 'W-9 saved but incomplete. Fill in the missing details.'); } catch (err) { toast(writeErr(err)); } });
   };
   const clr = $('#w-clear', m); if (clr) clr.onclick = async () => {
     if (!needWrite() || !await confirmModal({title: 'Remove W-9', text: `Remove the W-9 record for ${esc(a.name)}? Use this only if it was recorded by mistake.`, ok: 'Remove', danger: true})) return;
@@ -3086,13 +3408,13 @@ function taxYearSection(y) {
   const missing = rows.filter(x => w9Status(x.p).k !== 'ok').length;
   if (missing) h += `<div class="note">${missing} payee${missing === 1 ? '' : 's'} paid in ${esc(y)} ${missing === 1 ? 'has' : 'have'} no complete W-9. Collect them before year-end filing.</div>`;
   return h + `<div class="tbl-wrap"><table><thead><tr><th>Payee</th><th>W-9 name</th><th>Classification</th><th>TIN</th><th>W-9</th><th class="r">Paid in ${esc(y)}</th></tr></thead><tbody>${rows.map(x => { const w = x.p?.w9 || {};
-    return `<tr class="click" data-act="open-agent" data-id="${esc(x.id)}" tabindex="0"><td><div class="cell-main">${esc(payeeName(x.id))}</div><div class="cell-sub">${esc([x.p?.agentNo && '#' + x.p.agentNo, orgName(orgIdOf(x.id))].filter(Boolean).join(' · '))}</div></td><td>${esc(w.name || '')}${w.businessName ? `<div class="cell-sub" style="font-family:var(--sans)">${esc(w.businessName)}</div>` : ''}</td><td>${esc(w9ClassLabel(w))}</td><td class="num">${esc(maskTin(w))}</td><td>${w9Pill(x.p)}</td><td class="r num">${money(x.amt)}</td></tr>`; }).join('')}</tbody><tfoot><tr><td colspan="5">Total paid</td><td class="r num">${money(sum(rows, x => x.amt))}</td></tr></tfoot></table></div>
+    return `<tr class="click" data-act="open-agent" data-id="${esc(x.id)}" tabindex="0"><td><div class="cell-main">${esc(payeeName(x.id))}</div><div class="cell-sub">${esc(isPartner(x.p) ? ['#' + (x.p.partnerNo || ''), 'Referral partner'].join(' · ') : [x.p?.agentNo && '#' + x.p.agentNo, orgName(orgIdOf(x.id))].filter(Boolean).join(' · '))}</div></td><td>${esc(w.name || '')}${w.businessName ? `<div class="cell-sub" style="font-family:var(--sans)">${esc(w.businessName)}</div>` : ''}</td><td>${esc(w9ClassLabel(w))}</td><td class="num">${esc(maskTin(w))}</td><td>${w9Pill(x.p)}</td><td class="r num">${money(x.amt)}</td></tr>`; }).join('')}</tbody><tfoot><tr><td colspan="5">Total paid</td><td class="r num">${money(sum(rows, x => x.amt))}</td></tr></tfoot></table></div>
     <p class="muted" style="font-size:13px;margin-top:10px">Totals use the date each payment was marked paid. Check filing thresholds and forms with your tax advisor; full TINs come from your payroll or tax system.</p>`;
 }
 function taxCSV(y) {
   const by = paidInYear(y);
   saveFile(`payvori-1099-prep-${y}.csv`, toCSV([['Tax year', 'Payee', 'Agent number', 'Organization', 'W-9 status', 'W-9 name (line 1)', 'Business name (line 2)', 'Tax classification', 'Exempt payee code', 'TIN type', 'TIN last 4', 'Address', 'City', 'State', 'ZIP', 'Backup withholding', 'Paid in year'],
-    ...[...by.entries()].map(([id, amt]) => { const p = payeeById(id) || {}; const w = p.w9 || {}; return [y, payeeName(id), p.agentNo || '', orgName(orgIdOf(id)), w9Status(p).label, w.name || '', w.businessName || '', w9ClassLabel(w), w.exemptPayee || '', w.tinType || '', w.tinLast4 || '', w.address || '', w.city || '', w.state || '', w.zip || '', w.backup ? 'Yes' : '', moneyPlain(amt)]; })]));
+    ...[...by.entries()].map(([id, amt]) => { const p = payeeById(id) || {}; const w = p.w9 || {}; return [y, payeeName(id), p.agentNo || p.partnerNo || '', isPartner(p) ? 'Referral partner' : orgName(orgIdOf(id)), w9Status(p).label, w.name || '', w.businessName || '', w9ClassLabel(w), w.exemptPayee || '', w.tinType || '', w.tinLast4 || '', w.address || '', w.city || '', w.state || '', w.zip || '', w.backup ? 'Yes' : '', moneyPlain(amt)]; })]));
 }
 Object.assign(actions, {
   'edit-w9': d => { const a = payeeById(d.id); if (a) w9Modal(a); },
@@ -3107,10 +3429,10 @@ function overrideSection(p) {
   const state = x => (x.from || '0000-00') > om ? '<span class="pill approved">Starts ' + esc(monthShort(x.from)) + '</span>' : x.to && x.to < om ? '<span class="pill">Ended</span>' : '<span class="pill paid">Active</span>';
   const span = x => `${x.from && x.from !== '0000-00' ? esc(monthShort(x.from)) : 'Start'} – ${x.to ? esc(monthShort(x.to)) : 'no end date'}`;
   let h = `<div class="sec-title"><h2>Overrides on ${esc(p.name)}</h2><span class="label">${mine.length}</span><button class="btn sm" data-act="new-override" data-org="${esc(p.id)}">${ic('plus')}Add override</button></div>`;
-  h += mine.length ? `<div class="tbl-wrap"><table><thead><tr><th>Paid to</th><th class="r">% of each deal</th><th>Dates</th><th>Status</th><th>Note</th></tr></thead><tbody>${mine.map(x => `<tr class="click" data-act="edit-override" data-org="${esc(p.id)}" data-id="${esc(x.id)}" tabindex="0"><td><div class="cell-main">${esc(payeeName(x.agentId))}</div><div class="cell-sub">${esc([payeeById(x.agentId)?.agentNo && '#' + payeeById(x.agentId).agentNo, orgName(orgIdOf(x.agentId))].filter(Boolean).join(' · '))}</div></td><td class="r num">${esc(pct(x.pct))}</td><td class="muted">${span(x)}</td><td>${state(x)}</td><td class="muted">${esc(x.note || '')}</td></tr>`).join('')}</tbody></table></div>
-    <p class="muted" style="font-size:13px;margin-top:10px">An override pays the referring organization's agent a percentage of every deal under ${esc(p.name)} while it's active. It comes out of Payvori's share, so ${esc(p.name)}'s own pay doesn't change. A single deal can use a different % or none.</p>`
+  h += mine.length ? `<div class="tbl-wrap"><table><thead><tr><th>Paid to</th><th class="r">% of schedule profit</th><th>Dates</th><th>Status</th><th>Note</th></tr></thead><tbody>${mine.map(x => `<tr class="click" data-act="edit-override" data-org="${esc(p.id)}" data-id="${esc(x.id)}" tabindex="0"><td><div class="cell-main">${esc(payeeName(x.agentId))}</div><div class="cell-sub">${esc([payeeById(x.agentId)?.agentNo && '#' + payeeById(x.agentId).agentNo, orgName(orgIdOf(x.agentId))].filter(Boolean).join(' · '))}</div></td><td class="r num">${esc(pct(x.pct))}</td><td class="muted">${span(x)}</td><td>${state(x)}</td><td class="muted">${esc(x.note || '')}</td></tr>`).join('')}</tbody></table></div>
+    <p class="muted" style="font-size:13px;margin-top:10px">An override pays the referring organization's agent a smaller percentage of ${esc(p.name)}'s schedule profit on every merchant while it's active. It comes out of Payvori's share, so ${esc(p.name)}'s own pay doesn't change. A single merchant can use a different % or none.</p>`
     : `<p class="muted">No overrides. Add one when another organization referred ${esc(p.name)} and earns a percentage of its deals.</p>`;
-  if (earns.length) h += `<div class="sec-title"><h2>Overrides ${esc(p.name)} earns</h2><span class="label">${earns.length}</span></div><div class="tbl-wrap"><table><thead><tr><th>On organization</th><th>Paid to</th><th class="r">% of each deal</th><th>Dates</th><th>Status</th></tr></thead><tbody>${earns.map(x => `<tr class="click" data-act="open-org" data-id="${esc(x.on.id)}" tabindex="0"><td class="cell-main">${esc(x.on.name)}</td><td>${esc(payeeName(x.agentId))}</td><td class="r num">${esc(pct(x.pct))}</td><td class="muted">${span(x)}</td><td>${state(x)}</td></tr>`).join('')}</tbody></table></div>`;
+  if (earns.length) h += `<div class="sec-title"><h2>Overrides ${esc(p.name)} earns</h2><span class="label">${earns.length}</span></div><div class="tbl-wrap"><table><thead><tr><th>On organization</th><th>Paid to</th><th class="r">% of schedule profit</th><th>Dates</th><th>Status</th></tr></thead><tbody>${earns.map(x => `<tr class="click" data-act="open-org" data-id="${esc(x.on.id)}" tabindex="0"><td class="cell-main">${esc(x.on.name)}</td><td>${esc(payeeName(x.agentId))}</td><td class="r num">${esc(pct(x.pct))}</td><td class="muted">${span(x)}</td><td>${state(x)}</td></tr>`).join('')}</tbody></table></div>`;
   return h;
 }
 function overrideModal(orgId, ovId) {
@@ -3119,18 +3441,21 @@ function overrideModal(orgId, ovId) {
   const lf = latestFinalMonth();
   const refOrgId0 = x ? orgIdOf(x.agentId) : '';
   const m = openModal({title: isNew ? `Add override on ${esc(org.name)}` : `Override on ${esc(org.name)}`, body: `
-    <p class="muted" style="font-size:13.5px">The referring organization's agent earns this percentage of every deal under ${esc(org.name)}. It comes out of Payvori's share.</p>
+    <p class="muted" style="font-size:13.5px">${esc(org.name)} is paid normally on its schedule. The referring organization's agent is paid on that same schedule profit, at this smaller percentage, on every merchant under ${esc(org.name)}. It comes out of Payvori's share, so ${esc(org.name)}'s pay doesn't change.</p>
     <div class="grid2">${fld('ov-org', 'Referring organization', `<select id="ov-org">${opt('', 'Choose organization…', refOrgId0)}${orgList().filter(o => o.id !== org.id).map(o => opt(o.id, o.name, refOrgId0)).join('')}</select>`)}${fld('ov-agent', 'Agent who gets paid', `<select id="ov-agent"></select>`)}</div>
-    <div class="grid3">${fld('ov-pct', '% of each deal', `<div class="pct-in"><input type="number" id="ov-pct" min="0" max="100" step="0.01" value="${esc(x?.pct ?? '')}"></div>`)}${fld('ov-from', 'Starts', tin('ov-from', x?.from && x.from !== '0000-00' ? x.from : nextOpenMonth(), '', 'month'))}${fld('ov-to', 'Ends (optional)', tin('ov-to', x?.to || '', '', 'month'))}</div>
+    <div class="grid3">${fld('ov-pct', '% of schedule profit', `<div class="pct-in"><input type="number" id="ov-pct" min="0" max="100" step="0.01" value="${esc(x?.pct ?? '')}"></div>`)}${fld('ov-from', 'Starts', tin('ov-from', x?.from && x.from !== '0000-00' ? x.from : nextOpenMonth(), '', 'month'))}${fld('ov-to', 'Ends (optional)', tin('ov-to', x?.to || '', '', 'month'))}</div>
     ${fld('ov-note', 'Note', tin('ov-note', x?.note || '', 'e.g. Referral agreement signed 11/2026, 24 months'))}
+    <div id="ov-ex"></div>
     <div id="ov-warn"></div>`,
     foot: `${!isNew ? `<button class="btn danger left" id="ov-del">${ic('trash')}Delete</button>` : ''}<button class="btn" data-close>Cancel</button><button class="btn primary" id="ov-save">${isNew ? 'Add override' : 'Save changes'}</button>`});
   const fillAgents = cur => { const o = $('#ov-org', m).value, sel = $('#ov-agent', m), ags = agentsOf(o).filter(a => (a.status || 'Active') === 'Active' || a.id === cur);
     const def = cur || orgById(o)?.primaryAgentId || '';
     sel.innerHTML = !o ? opt('', 'Choose an organization first', '') : !ags.length ? opt('', 'This organization has no agents', '') : ags.map(a => opt(a.id, agentLabel(a), def)).join(''); sel.disabled = !o || !ags.length; };
   const warn = () => { const f = $('#ov-from', m).value; $('#ov-warn', m).innerHTML = lf && f && f <= lf ? `<div class="note info" style="margin:0">${esc(monthLabel(lf))} is already approved. Approved months keep what was paid; the override only reaches them if you undo and rerun them.</div>` : ''; };
-  fillAgents(x?.agentId || ''); warn();
-  $('#ov-org', m).onchange = () => fillAgents(''); $('#ov-from', m).onchange = warn;
+  const ex = () => { const p2 = +val(m, 'ov-pct'), ref = orgById(val(m, 'ov-org'))?.name || 'the referring organization';
+    $('#ov-ex', m).innerHTML = p2 > 0 && p2 < 100 ? `<div class="panel" style="font-size:13.5px"><b>Example:</b> a merchant's schedule profit is $1,000.00 and ${esc(org.name)}'s split is 70%. ${esc(org.name)} gets $700.00, as normal. ${esc(ref)} gets ${money(1000 * p2)} (${pct(p2)} of $1,000.00). Payvori keeps ${money(1000 * (30 - p2))} plus its padding between its cost and ${esc(org.name)}'s buy rates.</div>` : ''; };
+  fillAgents(x?.agentId || ''); warn(); ex();
+  $('#ov-org', m).onchange = () => { fillAgents(''); ex(); }; $('#ov-from', m).onchange = warn; $('#ov-pct', m).oninput = ex;
   $('#ov-save', m).onclick = ev => {
     const agentId = val(m, 'ov-agent'), p2 = +val(m, 'ov-pct'), from = val(m, 'ov-from'), to = val(m, 'ov-to');
     if (!val(m, 'ov-org')) return toast('Choose the referring organization.');
@@ -3139,7 +3464,7 @@ function overrideModal(orgId, ovId) {
     if (!from) return toast('Choose the start month.');
     if (to && to < from) { $('#ov-to', m).focus(); return toast('The end month is before the start month.'); }
     if (!needWrite()) return;
-    const item = {id: x?.id || ('ov' + Math.random().toString(36).slice(2, 9)), agentId, pct: p2, from, to, note: val(m, 'ov-note'), at: nowIso(), by: S.uid || null};
+    const item = {id: x?.id || ('ov' + Math.random().toString(36).slice(2, 9)), agentId, pct: p2, basis: 'schedule', from, to, note: val(m, 'ov-note'), at: nowIso(), by: S.uid || null};
     const next = isNew ? [...list, item] : list.map(o => o.id === item.id ? item : o);
     busy(ev.currentTarget, async () => { try { await S.db.doc('payees/' + org.id).update({overrides: next, updatedAt: nowIso()}); closeModal(); toast(isNew ? `Override added: ${pct(p2)} to ${payeeName(agentId)}.` : 'Override saved.'); } catch (err) { toast(writeErr(err)); } });
   };
